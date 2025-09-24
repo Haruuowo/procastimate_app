@@ -71,8 +71,8 @@ class _SignInState extends State<SignIn> {
                   Center(
                     child: Image.asset(
                       'assets/logo.png',
-                      width: 120,
-                      height: 120,
+                      width: 250,
+                      height: 250,
                       fit: BoxFit.contain,
                     ),
                   ),
