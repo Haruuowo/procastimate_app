@@ -1,29 +1,26 @@
-import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 
-// Simple placeholder auth service to be replaced with Firebase later.
 class AuthService {
   static final AuthService instance = AuthService._internal();
   AuthService._internal();
 
-  String? _email;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  String? get currentUserEmail => _email;
+  User? get currentUser => _auth.currentUser;
 
-  Future<String> signInWithEmail(String email, String password) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(milliseconds: 400));
-    _email = email;
-    return _email!;
+  Future<User?> signInWithEmail(String email, String password) async {
+    final result = await _auth.signInWithEmailAndPassword(email: email, password: password);
+    return result.user;
   }
 
-  Future<String> createUserWithEmail(String email, String password) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    _email = email;
-    return _email!;
+  Future<User?> createUserWithEmail(String email, String password) async {
+    final result = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    return result.user;
   }
 
   Future<void> signOut() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _email = null;
+    await _auth.signOut();
   }
+
+  Stream<User?> get userChanges => _auth.authStateChanges();
 }

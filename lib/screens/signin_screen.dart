@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-// Firebase removed for now — using local mock auth
 import 'package:procastimate_app/util/colors.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
 import 'package:procastimate_app/screens/home_screen.dart';
@@ -17,6 +16,7 @@ class _SignInState extends State<SignIn> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscure = true;
+  String? _error;
 
   @override
   void dispose() {
@@ -25,16 +25,25 @@ class _SignInState extends State<SignIn> {
     super.dispose();
   }
 
-  void _trySignIn() {
+  Future<void> _trySignIn() async {
     if (_formKey.currentState?.validate() ?? false) {
-      final email = _emailController.text.trim();
-      // Use AuthService placeholder
-      AuthService.instance.signInWithEmail(email, _passwordController.text).then((signedEmail) {
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => HomeScreen(email: signedEmail)));
-      });
+      try {
+        final user = await AuthService.instance.signInWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+        if (user != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        } else {
+          setState(() => _error = 'Sign in failed. Please try again.');
+        }
+      } catch (e) {
+        setState(() => _error = e.toString());
+      }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +55,6 @@ class _SignInState extends State<SignIn> {
             colors: [
               hexStringToColorValue("BCA88D"),
               hexStringToColorValue("BCA88D"),
-              
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -60,12 +68,11 @@ class _SignInState extends State<SignIn> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo
                   Center(
                     child: Image.asset(
                       'assets/logo.png',
-                      width: 120,
-                      height: 120,
+                      width: 250,
+                      height: 250,
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -125,6 +132,14 @@ class _SignInState extends State<SignIn> {
                       return null;
                     },
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: _trySignIn,
@@ -157,4 +172,3 @@ class _SignInState extends State<SignIn> {
     );
   }
 }
-

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-// Firebase removed for now — using local mock auth
 import 'package:procastimate_app/util/colors.dart';
+import 'package:procastimate_app/screens/home_screen.dart';
+import 'package:procastimate_app/services/auth_service.dart';
 
 class SignUp extends StatefulWidget {
   const SignUp({super.key});
@@ -15,6 +16,8 @@ class _SignUpState extends State<SignUp> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmController = TextEditingController();
   bool _obscure = true;
+  bool _obscureConfirm = true;
+  String? _error;
 
   @override
   void dispose() {
@@ -25,13 +28,23 @@ class _SignUpState extends State<SignUp> {
   }
 
   Future<void> _trySignUp() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-  final email = _emailController.text.trim();
-    // Mock sign-up: accept any valid input and return to SignIn
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Account created for $email (mock)')),
-    );
-    Navigator.of(context).pop();
+    if (_formKey.currentState?.validate() ?? false) {
+      try {
+        final user = await AuthService.instance.createUserWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+        if (user != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        } else {
+          setState(() => _error = 'Sign up failed. Please try again.');
+        }
+      } catch (e) {
+        setState(() => _error = e.toString());
+      }
+    }
   }
 
   @override
@@ -42,9 +55,8 @@ class _SignUpState extends State<SignUp> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              hexStringToColorValue('BCA88D'),
-              hexStringToColorValue('BCA88D'),
-              
+              hexStringToColorValue("BCA88D"),
+              hexStringToColorValue("BCA88D"),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -58,18 +70,17 @@ class _SignUpState extends State<SignUp> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo
                   Center(
                     child: Image.asset(
                       'assets/logo.png',
-                      width: 120,
-                      height: 120,
+                      width: 250,
+                      height: 250,
                       fit: BoxFit.contain,
                     ),
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Create account',
+                    'Create Account',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 28,
@@ -91,7 +102,7 @@ class _SignUpState extends State<SignUp> {
                       if (value == null || value.trim().isEmpty) {
                         return 'Please enter your email';
                       }
-                      if (!RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+                      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
                           .hasMatch(value.trim())) {
                         return 'Enter a valid email';
                       }
@@ -126,12 +137,17 @@ class _SignUpState extends State<SignUp> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _confirmController,
-                    obscureText: _obscure,
-                    decoration: const InputDecoration(
+                    obscureText: _obscureConfirm,
+                    decoration: InputDecoration(
                       filled: true,
                       fillColor: Colors.white70,
-                      hintText: 'Confirm password',
-                      prefixIcon: Icon(Icons.lock_outline),
+                      hintText: 'Confirm Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                            _obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                      ),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -143,6 +159,14 @@ class _SignUpState extends State<SignUp> {
                       return null;
                     },
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: _trySignUp,
@@ -152,9 +176,11 @@ class _SignUpState extends State<SignUp> {
                     ),
                     child: const Text('Sign Up'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
                     child: const Text(
                       'Already have an account? Sign in',
                       style: TextStyle(color: Colors.white),
