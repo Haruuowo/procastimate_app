@@ -10,6 +10,6 @@ Color hexStringToColorValue(String hexColor) {
 }
 
 // Named theme colors — change these to update the app color scheme
-final Color kPrimaryYellow = hexStringToColorValue('F7B500');
-final Color kAccentA = hexStringToColorValue('BCA88D');
-final Color kAccentB = hexStringToColorValue('7D8D86');
+
+final Color kAccentA = hexStringToColorValue("BCA88D");
+final Color kAccentB = hexStringToColorValue("BCA88D");

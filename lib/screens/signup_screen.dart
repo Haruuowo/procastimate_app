@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:procastimate_app/screens/signin_screen.dart';
 import 'package:procastimate_app/util/colors.dart';
 import 'package:procastimate_app/screens/home_screen.dart';
 import 'package:procastimate_app/services/auth_service.dart';
@@ -78,7 +79,7 @@ class _SignUpState extends State<SignUp> {
                 ),
               ),
 
-              // 👉 Main content
+          ////main of code
               Center(
                 child: SingleChildScrollView(
                   child: Form(
@@ -195,15 +196,18 @@ class _SignUpState extends State<SignUp> {
                           child: const Text('Sign Up'),
                         ),
                         const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: () {
-                            MaterialPageRoute(builder: (_) => const SignIn());
-                          },
-                          child: const Text(
-                            'Already have an account? Sign in',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
+                       TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const SignIn()),
+                        );
+                      },
+                      child: const Text(
+                        'Already have an account? Sign in',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+
                         const SizedBox(height: 24),
                       ],
                     ),

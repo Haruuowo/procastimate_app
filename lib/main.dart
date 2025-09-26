@@ -7,10 +7,29 @@ import 'package:procastimate_app/screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const MyApp());
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    runApp(const MyApp());
+  } catch (e, stack) {
+    // If Firebase fails, show an error screen instead of crashing silently
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Text(
+              'Firebase initialization failed:\n$e',
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+    debugPrintStack(label: e.toString(), stackTrace: stack);
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -23,6 +42,7 @@ class MyApp extends StatelessWidget {
       title: 'Procastimate',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true, // enables Material 3 design
       ),
       home: const HomeScreen(),
       routes: {
@@ -32,4 +52,5 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 
