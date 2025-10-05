@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:procastimate_app/services/auth_service.dart';
 import 'package:procastimate_app/mainapp/profile_screen.dart';
 import 'package:procastimate_app/mainapp/settings_screen.dart';
+import 'package:procastimate_app/mainapp/calendar_screen.dart';
+import 'package:procastimate_app/mainapp/score_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final String? email;
@@ -24,7 +26,7 @@ class _MainScreenState extends State<MainScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // top bar with profile + settings (nav-style black border)
+            // TOP NAV BAR - straight black bar with clickable icons
             Container(
               width: double.infinity,
               height: 56,
@@ -71,7 +73,6 @@ class _MainScreenState extends State<MainScreen> {
               padding: const EdgeInsets.only(top: 8, bottom: 12),
               child: Column(
                 children: [
-                  // placeholder logo
                   SizedBox(
                     height: 110,
                     child: Image.asset(
@@ -117,7 +118,6 @@ class _MainScreenState extends State<MainScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // TODO: navigate to Create Task
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Create Task pressed')),
                     );
@@ -139,24 +139,27 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
 
-      // bottom nav with 3 icons
+      // bottom nav with 3 icons (third = Score)
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
           setState(() => _selectedIndex = i);
-          // handle simple nav/demos
           if (i == 0) {
-            // calendar
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CalendarScreen()),
+            );
           } else if (i == 1) {
-            // home
+            // stay on home
           } else if (i == 2) {
-            // profile (open account)
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ScoreScreen()),
+            );
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
         ],
         selectedItemColor: Colors.black87,
         unselectedItemColor: Colors.black45,

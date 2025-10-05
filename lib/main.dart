@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:procastimate_app/services/theme_service.dart';
 import 'firebase_options.dart';
+import 'package:procastimate_app/services/task_service.dart';
+import 'package:procastimate_app/screens/home_screen.dart';
 import 'package:procastimate_app/screens/signin_screen.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
-import 'package:procastimate_app/screens/home_screen.dart';
-import 'package:procastimate_app/services/theme_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,17 +31,11 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   ThemeData _buildLightTheme() {
-    const fallbackPrimary = Color(0xFFBCA88D); // same tone used before
+    const fallbackPrimary = Color(0xFFBCA88D);
     return ThemeData(
       brightness: Brightness.light,
       primaryColor: fallbackPrimary,
       scaffoldBackgroundColor: Colors.white,
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: Colors.black87),
-      ),
     );
   }
 
@@ -50,12 +45,6 @@ class MyApp extends StatelessWidget {
       brightness: Brightness.dark,
       primaryColor: Colors.black,
       scaffoldBackgroundColor: Colors.black87,
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(backgroundColor: fallbackPrimary),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: fallbackPrimary),
-      ),
     );
   }
 
@@ -81,5 +70,4 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 

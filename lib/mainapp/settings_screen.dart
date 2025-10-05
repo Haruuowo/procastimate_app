@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:procastimate_app/services/auth_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:procastimate_app/screens/home_screen.dart'; // added import
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,7 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reset Password (placeholder)'),
+        title: const Text('Reset Password'),
         content: TextField(
           controller: emailController,
           keyboardType: TextInputType.emailAddress,
@@ -25,11 +28,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              final email = emailController.text.trim();
+              if (email.isEmpty || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email address')));
+                return;
+              }
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Reset password placeholder — implement backend call')),
-              );
+
+              // Guard: ensure Firebase was initialized
+              if (Firebase.apps.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Firebase not initialized')));
+                return;
+              }
+
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.showSnackBar(const SnackBar(content: Text('Sending reset email...')));
+              try {
+                await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                messenger.showSnackBar(const SnackBar(content: Text('Password reset email sent')));
+              } on FirebaseAuthException catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text('Error: ${e.message ?? e.code}')));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
             },
             child: const Text('Send'),
           ),
@@ -39,10 +61,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _signOut() async {
+    // Guard: ensure Firebase was initialized
+    if (Firebase.apps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Firebase not initialized')));
+      return;
+    }
+
     try {
-      await AuthService.instance.signOut();
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      await FirebaseAuth.instance.signOut();
+      try { await AuthService.instance.signOut(); } catch (_) {}
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const HomeScreen()), (route) => false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign out failed: ${e.message ?? e.code}')));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign out failed: $e')));
     }
@@ -57,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           ListTile(
             title: const Text('Reset Password'),
-            subtitle: const Text('Sends a password reset email (placeholder)'),
+            subtitle: const Text('Sends a password reset email'),
             trailing: ElevatedButton(
               onPressed: _showResetPasswordDialog,
               child: const Text('Reset'),
