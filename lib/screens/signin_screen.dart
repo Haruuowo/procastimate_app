@@ -45,7 +45,7 @@ class _SignInState extends State<SignIn> {
         } else if (result is String) {
           email = result;
         } else if (result is User) {
-          email = (result as User).email;
+          email = (result).email;
         } else {
           // fallback: try to extract email if result provides it, otherwise use toString()
           try {

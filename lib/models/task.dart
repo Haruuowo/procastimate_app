@@ -19,6 +19,7 @@ class Task {
     this.completed = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
+  // 
   Task copyWith({
     String? id,
     String? title,
@@ -41,6 +42,7 @@ class Task {
     );
   }
 
+  
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -52,14 +54,17 @@ class Task {
         'completed': completed,
       };
 
-  factory Task.fromJson(Map<String, dynamic> m) => Task(
-        id: m['id'] as String,
-        title: m['title'] as String,
-        description: m['description'] as String?,
-        createdAt: DateTime.parse(m['createdAt'] as String),
-        dueDate: m['dueDate'] != null ? DateTime.parse(m['dueDate'] as String) : null,
-        completedAt: m['completedAt'] != null ? DateTime.parse(m['completedAt'] as String) : null,
-        points: (m['points'] as int?) ?? 10,
-        completed: (m['completed'] as bool?) ?? false,
+  factory Task.fromJson(Map<String, dynamic> json) => Task(
+        id: json['id'],
+        title: json['title'],
+        description: json['description'],
+        createdAt: DateTime.parse(json['createdAt']),
+        dueDate:
+            json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
+        completedAt: json['completedAt'] != null
+            ? DateTime.parse(json['completedAt'])
+            : null,
+        points: json['points'] ?? 10,
+        completed: json['completed'] ?? false,
       );
 }

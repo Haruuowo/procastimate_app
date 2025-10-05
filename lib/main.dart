@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:procastimate_app/services/theme_service.dart';
 import 'firebase_options.dart';
-import 'package:procastimate_app/services/task_service.dart';
 import 'package:procastimate_app/screens/home_screen.dart';
 import 'package:procastimate_app/screens/signin_screen.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
 
-void main() async {
+// initialize Firebase and local services before runApp
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (!kIsWeb) {
@@ -40,7 +40,6 @@ class MyApp extends StatelessWidget {
   }
 
   ThemeData _buildDarkTheme() {
-    const fallbackPrimary = Color(0xFFBCA88D);
     return ThemeData(
       brightness: Brightness.dark,
       primaryColor: Colors.black,
