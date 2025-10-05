@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:procastimate_app/util/colors.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
-import 'package:procastimate_app/screens/home_screen.dart';
+import 'package:procastimate_app/mainapp/main_screen.dart';
 import 'package:procastimate_app/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SignIn extends StatefulWidget {
   const SignIn({super.key});
@@ -26,20 +27,51 @@ class _SignInState extends State<SignIn> {
   }
 
   Future<void> _trySignIn() async {
+    if (!mounted) return;
     if (_formKey.currentState?.validate() ?? false) {
+      setState(() => _error = null);
       try {
-        final user = await AuthService.instance.signInWithEmail(
+        final dynamic result = await AuthService.instance.signInWithEmail(
           _emailController.text.trim(),
           _passwordController.text,
         );
-        if (user != null) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
+
+        debugPrint('signIn result: $result (${result.runtimeType})');
+
+        String? email;
+        if (result == null) {
+          setState(() => _error = 'Sign in failed. Please try again.');
+          return;
+        } else if (result is String) {
+          email = result;
+        } else if (result is User) {
+          email = (result as User).email;
+        } else {
+          // fallback: try to extract email if result provides it, otherwise use toString()
+          try {
+            final possibleEmail = (result as dynamic).email;
+            if (possibleEmail is String) {
+              email = possibleEmail;
+            } else {
+              email = result.toString();
+            }
+          } catch (_) {
+            email = result.toString();
+          }
+        }
+
+        if (email != null && email.isNotEmpty) {
+          if (!mounted) return;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => MainScreen(email: email)),
+            (route) => false,
           );
         } else {
-          setState(() => _error = 'Sign in failed. Please try again.');
+          setState(() => _error = 'Sign in succeeded but no email returned.');
         }
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('signIn error: $e\n$st');
+        if (!mounted) return;
         setState(() => _error = e.toString());
       }
     }
@@ -69,14 +101,12 @@ class _SignInState extends State<SignIn> {
                 child: IconButton(
                   icon: const Icon(Icons.arrow_back, color: Colors.black, size: 28),
                   onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
+                    Navigator.of(context).pushReplacementNamed('/');
                   },
                 ),
               ),
 
-              // 👉 Main content
+              // Main content
               Center(
                 child: SingleChildScrollView(
                   child: Form(
@@ -88,8 +118,8 @@ class _SignInState extends State<SignIn> {
                         Center(
                           child: Image.asset(
                             'assets/logo.png',
-                            width: 250,
-                            height: 250,
+                            width: 200,
+                            height: 200,
                             fit: BoxFit.contain,
                           ),
                         ),
@@ -166,7 +196,6 @@ class _SignInState extends State<SignIn> {
                           ),
                           child: const Text('Sign In'),
                         ),
-                        const SizedBox(height: 8),
                         const SizedBox(height: 12),
                         TextButton(
                           onPressed: () {
