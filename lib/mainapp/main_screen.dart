@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:procastimate_app/mainapp/profile_screen.dart';
 import 'package:procastimate_app/mainapp/settings_screen.dart';
 import 'package:procastimate_app/mainapp/calendar_screen.dart';
 import 'package:procastimate_app/mainapp/score_screen.dart';
 import 'package:procastimate_app/models/task.dart';
 import 'package:procastimate_app/models/task_data.dart';
+import 'package:procastimate_app/mainapp/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final String? email;
@@ -241,7 +241,7 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     InkWell(
                       onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileTab()));
                       },
                       borderRadius: BorderRadius.circular(8),
                       child: const Padding(

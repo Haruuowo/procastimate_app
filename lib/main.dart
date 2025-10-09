@@ -6,6 +6,7 @@ import 'firebase_options.dart';
 import 'package:procastimate_app/screens/home_screen.dart';
 import 'package:procastimate_app/screens/signin_screen.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
+import 'package:procastimate_app/mainapp/main_screen.dart';
 
 // initialize Firebase and local services before runApp
 Future<void> main() async {
@@ -63,6 +64,7 @@ class MyApp extends StatelessWidget {
             '/': (_) => const HomeScreen(),
             '/signin': (_) => const SignIn(),
             '/signup': (_) => const SignUp(),
+            '/main_screen': (context) => const MainScreen(),
           },
         );
       },
