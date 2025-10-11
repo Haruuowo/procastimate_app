@@ -32,6 +32,8 @@ dependencies:
   firebase_auth: 6.1.0
   bitsdojo_window: ^0.1.5
   image_picker: ^1.1.1
+  cloud_firestore: ^6.0.2
+  firebase_storage: ^13.0.2
   flutter:
     sdk: flutter
 

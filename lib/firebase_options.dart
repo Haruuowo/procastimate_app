@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -28,10 +25,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
         return windows;
       case TargetPlatform.linux:
@@ -60,6 +54,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '153396135668',
     projectId: 'procastimate-adet',
     storageBucket: 'procastimate-adet.firebasestorage.app',
+    iosClientId: '153396135668-q596f45smskn10eg0lt1b4luie33blkg.apps.googleusercontent.com',
     iosBundleId: 'com.example.procastimateApp',
   );
 
@@ -70,6 +65,25 @@ class DefaultFirebaseOptions {
     projectId: 'procastimate-adet',
     authDomain: 'procastimate-adet.firebaseapp.com',
     storageBucket: 'procastimate-adet.firebasestorage.app',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyB91AQg1TAJ1IHD1SGR_yDdIXwIkVYg5Ic',
+    appId: '1:153396135668:web:bbc10f3f68aa482be900a1',
+    messagingSenderId: '153396135668',
+    projectId: 'procastimate-adet',
+    authDomain: 'procastimate-adet.firebaseapp.com',
+    storageBucket: 'procastimate-adet.firebasestorage.app',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyB_iQP7FzQ-VpoNegFI9udbphzGirIIshU',
+    appId: '1:153396135668:ios:d30570b1c3d3b155e900a1',
+    messagingSenderId: '153396135668',
+    projectId: 'procastimate-adet',
+    storageBucket: 'procastimate-adet.firebasestorage.app',
+    iosClientId: '153396135668-q596f45smskn10eg0lt1b4luie33blkg.apps.googleusercontent.com',
+    iosBundleId: 'com.example.procastimateApp',
   );
 
 }
