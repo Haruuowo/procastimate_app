@@ -1,3 +1,4 @@
+// profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:procastimate_app/models/task_data.dart';
 import 'package:procastimate_app/mainapp/calendar_screen.dart';
@@ -5,6 +6,7 @@ import 'package:procastimate_app/mainapp/score_screen.dart';
 import 'package:procastimate_app/mainapp/main_screen.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -17,14 +19,126 @@ class _ProfileTabState extends State<ProfileTab> {
   int _selectedIndex = 1;
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
+  String _userName = "Your Name"; // default until loaded from prefs
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+    _loadProfileImage();
+  }
+
+  // 🔄 Load saved name
+  Future<void> _loadUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('username');
+    if (saved != null && saved.isNotEmpty) {
       setState(() {
-        _profileImage = File(image.path);
+        _userName = saved;
       });
     }
+  }
+
+  // 💾 Save name
+  Future<void> _saveUserName(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('username', name);
+  }
+
+  // 🔄 Load saved profile image
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imagePath = prefs.getString('profileImagePath');
+    if (imagePath != null && imagePath.isNotEmpty) {
+      setState(() {
+        _profileImage = File(imagePath);
+      });
+    }
+  }
+
+  // 💾 Save image path
+  Future<void> _saveProfileImage(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('profileImagePath', path);
+  }
+
+  // 📸 Pick image (Camera or Gallery)
+  Future<void> _pickImage() async {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.photo_library, size: 35),
+              onPressed: () async {
+                Navigator.pop(context);
+                final XFile? image =
+                    await _picker.pickImage(source: ImageSource.gallery);
+                if (image != null) {
+                  setState(() => _profileImage = File(image.path));
+                  _saveProfileImage(image.path);
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.camera_alt, size: 35),
+              onPressed: () async {
+                Navigator.pop(context);
+                final XFile? image =
+                    await _picker.pickImage(source: ImageSource.camera);
+                if (image != null) {
+                  setState(() => _profileImage = File(image.path));
+                  _saveProfileImage(image.path);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✏️ Edit Name Dialog
+  void _showEditProfileDialog() {
+    TextEditingController nameController =
+        TextEditingController(text: _userName);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Profile'),
+          content: TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: 'Enter your name',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newName = nameController.text.trim();
+                if (newName.isNotEmpty) {
+                  setState(() {
+                    _userName = newName;
+                  });
+                  await _saveUserName(newName);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -50,7 +164,7 @@ class _ProfileTabState extends State<ProfileTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ✅ Profile Picture (Clickable)
+                
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -73,16 +187,22 @@ class _ProfileTabState extends State<ProfileTab> {
 
                 const SizedBox(width: 20),
 
-                // Points + Task summary
+                // Points + Task summary + Name
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
                     Row(
                       children: const [
                         Icon(Icons.stars_sharp, color: Colors.orange, size: 40),
                         SizedBox(width: 6),
                         Text(
-                          '0', // TODO: replace with Firestore points later
+                          '0',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -103,6 +223,24 @@ class _ProfileTabState extends State<ProfileTab> {
                   ],
                 ),
               ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // ✏️ Edit Profile Button
+            ElevatedButton.icon(
+              onPressed: _showEditProfileDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.brown.shade800,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.edit, color: Colors.white),
+              label: const Text(
+                'Edit Profile',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
 
             const SizedBox(height: 30),
@@ -203,7 +341,6 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
       ),
 
-      // 🔽 SAME BOTTOM NAV AS MAINSCREEN
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
