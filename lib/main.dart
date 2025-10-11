@@ -7,21 +7,22 @@ import 'package:procastimate_app/screens/signin_screen.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
 import 'package:procastimate_app/mainapp/main_screen.dart';
 
-// initialize Firebase and local services before runApp
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-try {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  debugPrint('✅ Firebase initialized for: ${DefaultFirebaseOptions.currentPlatform.appId}');
-} catch (e, st) {
-  debugPrint('❌ Firebase initialization failed: $e\n$st');
-}
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    debugPrint('✅ Firebase initialized for: ${DefaultFirebaseOptions.currentPlatform.appId}');
+  } catch (e, st) {
+    debugPrint('❌ Firebase initialization failed: $e\n$st');
+  }
 
   runApp(const MyApp());
 }
+
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -57,13 +58,12 @@ class MyApp extends StatelessWidget {
           initialRoute: '/',
           routes: {
             '/': (_) => const HomeScreen(),
-            '/signin': (_) => const SignIn(),
-            '/signup': (_) => const SignUp(),
-            '/main_screen': (context) => const MainScreen(),
+            '/signin': (_) => const SignInScreen(),
+            '/signup': (_) => const SignUpScreen(),
+            '/main_screen': (_) => const MainScreen(),
           },
         );
       },
     );
   }
 }
-
