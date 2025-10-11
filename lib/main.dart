@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:procastimate_app/services/theme_service.dart';
@@ -6,23 +5,20 @@ import 'firebase_options.dart';
 import 'package:procastimate_app/screens/home_screen.dart';
 import 'package:procastimate_app/screens/signin_screen.dart';
 import 'package:procastimate_app/screens/signup_screen.dart';
+import 'package:procastimate_app/mainapp/main_screen.dart';
 
 // initialize Firebase and local services before runApp
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb) {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } catch (e, st) {
-      debugPrint('Firebase.initializeApp failed: $e\n$st');
-      // continue without crashing
-    }
-  } else {
-    debugPrint('Web detected - skipping Firebase.initializeApp');
-  }
+try {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  debugPrint('✅ Firebase initialized for: ${DefaultFirebaseOptions.currentPlatform.appId}');
+} catch (e, st) {
+  debugPrint('❌ Firebase initialization failed: $e\n$st');
+}
 
   runApp(const MyApp());
 }
@@ -63,6 +59,7 @@ class MyApp extends StatelessWidget {
             '/': (_) => const HomeScreen(),
             '/signin': (_) => const SignIn(),
             '/signup': (_) => const SignUp(),
+            '/main_screen': (context) => const MainScreen(),
           },
         );
       },

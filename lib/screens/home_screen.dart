@@ -37,6 +37,8 @@ class HomeScreen extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 32),
+
+                    // If not signed in
                     if (email == null || email.isEmpty) ...[
                       const Text(
                         'Get Started',
@@ -55,8 +57,7 @@ class HomeScreen extends StatelessWidget {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.black,
                             shape: const StadiumBorder(),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           child: const Text(
                             'Sign In',
@@ -83,9 +84,11 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ] else ...[
+                    ]
+                    // If signed in
+                    else ...[
                       const Text(
-                        'Account',
+                        'Welcome Back!',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -95,8 +98,7 @@ class HomeScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const Text(
                         'Signed in as',
-                        style:
-                            TextStyle(fontSize: 16, color: Colors.white70),
+                        style: TextStyle(fontSize: 16, color: Colors.white70),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -107,7 +109,30 @@ class HomeScreen extends StatelessWidget {
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 28),
+
+                      // Continue button
+                      SizedBox(
+                        width: 220,
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              Navigator.of(context).pushNamed('/main_screen'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black87,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text(
+                            'Continue',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Sign out button
                       ElevatedButton(
                         onPressed: () async {
                           await AuthService.instance.signOut();
@@ -118,7 +143,7 @@ class HomeScreen extends StatelessWidget {
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black87,
+                          backgroundColor: Colors.black45,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 40, vertical: 14),
                         ),

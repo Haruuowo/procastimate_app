@@ -1,14 +1,15 @@
+// main_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:procastimate_app/mainapp/profile_screen.dart';
 import 'package:procastimate_app/mainapp/settings_screen.dart';
 import 'package:procastimate_app/mainapp/calendar_screen.dart';
 import 'package:procastimate_app/mainapp/score_screen.dart';
 import 'package:procastimate_app/models/task.dart';
 import 'package:procastimate_app/models/task_data.dart';
+import 'package:procastimate_app/mainapp/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final String? email;
@@ -20,11 +21,21 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 1;
+  String _savedName = ''; // loaded from SharedPreferences
 
   @override
   void initState() {
     super.initState();
     loadTasks();
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('username') ?? '';
+    setState(() {
+      _savedName = name;
+    });
   }
 
   Future<void> saveTasks() async {
@@ -65,28 +76,98 @@ class _MainScreenState extends State<MainScreen> {
     saveTasks();
   }
 
+  // Open add task dialog for a specific dateKey (existing date group) with due date option
   void _openCreateTaskDialogForDate(String dateKey) {
     final titleController = TextEditingController();
     final descController = TextEditingController();
-    DateTime dueDate = DateTime.parse(dateKey);
+    DateTime? dueDate = DateTime.tryParse(dateKey);
+
+    String dueDateLabel() {
+      if (dueDate == null) return "No due date";
+      return DateFormat('MM/dd/yyyy HH:mm').format(dueDate!);
+    }
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            Future<void> pickDateTime() async {
+              final pickedDate = await showDatePicker(
+                context: context,
+                initialDate: dueDate ?? DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2100),
+              );
+              if (pickedDate != null) {
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: dueDate != null
+                      ? TimeOfDay.fromDateTime(dueDate!)
+                      : const TimeOfDay(hour: 12, minute: 0),
+                );
+                final finalTime =
+                    pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
+                setDialogState(() {
+                  dueDate = DateTime(pickedDate.year, pickedDate.month,
+                      pickedDate.day, finalTime.hour, finalTime.minute);
+                });
+              }
+            }
+
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               title: const Text("Add Task"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(controller: titleController, decoration: const InputDecoration(labelText: "Title")),
-                  TextField(controller: descController, decoration: const InputDecoration(labelText: "Description")),
-                ],
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(labelText: "Title")),
+                    TextField(
+                        controller: descController,
+                        decoration:
+                            const InputDecoration(labelText: "Description")),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text("Due: ${dueDateLabel()}"),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.calendar_today),
+                          onPressed: () async {
+                            await pickDateTime();
+                          },
+                        ),
+                        if (dueDate != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setDialogState(() {
+                                dueDate = null;
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Tip: leave as 'No due date' to skip grouping by date.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel")),
                 ElevatedButton(
                   onPressed: () {
                     if (titleController.text.isNotEmpty) {
@@ -111,73 +192,101 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  // Open add task dialog (general) — due date is OPTIONAL now
   void _openCreateTaskDialog() {
     final titleController = TextEditingController();
     final descController = TextEditingController();
-    DateTime? dueDate = DateTime.now();
+    DateTime? dueDate;
+
+    String dueDateLabel() {
+      if (dueDate == null) return "No due date";
+      return DateFormat('MM/dd/yyyy HH:mm').format(dueDate!);
+    }
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            Future<void> pickDateTime() async {
+              final pickedDate = await showDatePicker(
+                context: context,
+                initialDate: dueDate ?? DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2100),
+              );
+              if (pickedDate != null) {
+                final pickedTime = await showTimePicker(
+                  context: context,
+                  initialTime: dueDate != null
+                      ? TimeOfDay.fromDateTime(dueDate!)
+                      : const TimeOfDay(hour: 12, minute: 0),
+                );
+                final finalTime =
+                    pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
+                setDialogState(() {
+                  dueDate = DateTime(pickedDate.year, pickedDate.month,
+                      pickedDate.day, finalTime.hour, finalTime.minute);
+                });
+              }
+            }
+
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               title: const Text("Create Task"),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(controller: titleController, decoration: const InputDecoration(labelText: "Title")),
-                    TextField(controller: descController, decoration: const InputDecoration(labelText: "Description")),
+                    TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(labelText: "Title")),
+                    TextField(
+                        controller: descController,
+                        decoration:
+                            const InputDecoration(labelText: "Description")),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            dueDate != null
-                                ? "Due: ${DateFormat('MM/dd/yyyy HH:mm').format(dueDate!)}"
-                                : "No due date",
-                          ),
+                          child: Text("Due: ${dueDateLabel()}"),
                         ),
                         IconButton(
                           icon: const Icon(Icons.calendar_today),
                           onPressed: () async {
-                            final pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: dueDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2100),
-                            );
-                            if (pickedDate != null) {
-                              final pickedTime = await showTimePicker(
-                                context: context,
-                                initialTime: TimeOfDay.fromDateTime(dueDate ?? DateTime.now()),
-                              );
-                              if (pickedTime != null) {
-                                setDialogState(() {
-                                  dueDate = DateTime(
-                                    pickedDate.year,
-                                    pickedDate.month,
-                                    pickedDate.day,
-                                    pickedTime.hour,
-                                    pickedTime.minute,
-                                  );
-                                });
-                              }
-                            }
+                            await pickDateTime();
                           },
                         ),
+                        if (dueDate != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setDialogState(() {
+                                dueDate = null;
+                              });
+                            },
+                          ),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Tip: leave as 'No due date' to skip grouping by date.",
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel")),
                 ElevatedButton(
                   onPressed: () {
-                    if (titleController.text.isNotEmpty && dueDate != null) {
+                    if (titleController.text.isNotEmpty) {
                       final task = Task(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
                         title: titleController.text,
@@ -187,6 +296,10 @@ class _MainScreenState extends State<MainScreen> {
                       setState(() => addTask(task));
                       saveTasks();
                       Navigator.pop(context);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a title')),
+                      );
                     }
                   },
                   child: const Text("Save"),
@@ -223,17 +336,18 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final username = widget.email != null ? widget.email!.split('@').first : 'Guest';
+    final username = _savedName.isNotEmpty
+        ? _savedName
+        : (widget.email != null ? widget.email!.split('@').first : 'Guest');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F3EF), // same beige as calendar
+      backgroundColor: const Color(0xFFF7F3EF),
       body: SafeArea(
         child: Column(
           children: [
-            //  TOP BAR (bigger and cleaner)
             Container(
               width: double.infinity,
-              height: 72, // was 56 → now taller
+              height: 72,
               color: Colors.brown.shade800,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -241,7 +355,13 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     InkWell(
                       onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                        Navigator.of(context)
+                            .push(
+                              MaterialPageRoute(builder: (_) => const ProfileTab()),
+                            )
+                            .then((_) {
+                          _loadUserName();
+                        });
                       },
                       borderRadius: BorderRadius.circular(8),
                       child: const Padding(
@@ -262,7 +382,9 @@ class _MainScreenState extends State<MainScreen> {
                     const Spacer(),
                     InkWell(
                       onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                        );
                       },
                       borderRadius: BorderRadius.circular(8),
                       child: const Padding(
@@ -274,8 +396,6 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
             ),
-
-            // WELCOME + LOGO
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 14),
               child: Column(
@@ -296,8 +416,6 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             ),
-
-            //  TASK AREA
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -305,7 +423,9 @@ class _MainScreenState extends State<MainScreen> {
                   children: tasksByDate.entries.map((entry) {
                     final dateKey = entry.key;
                     final tasks = entry.value;
-                    final dateLabel = DateFormat("MMMM d, yyyy").format(DateTime.parse(dateKey));
+                    final parsed = DateTime.tryParse(dateKey) ?? DateTime.now();
+                    final dateLabel =
+                        DateFormat("MMMM d, yyyy").format(parsed);
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: _DateColumn(
@@ -321,8 +441,6 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
             ),
-
-            //  CREATE TASK BUTTON
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: SizedBox(
@@ -344,8 +462,6 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
       ),
-
-      //  BOTTOM NAV
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
