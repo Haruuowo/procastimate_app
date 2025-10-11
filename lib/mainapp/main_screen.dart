@@ -1,15 +1,15 @@
 // main_screen.dart
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ Added for FirebaseAuth reference
+import 'package:procastimate_app/services/auth_service.dart';
 import 'package:procastimate_app/mainapp/settings_screen.dart';
 import 'package:procastimate_app/mainapp/calendar_screen.dart';
 import 'package:procastimate_app/mainapp/score_screen.dart';
+import 'package:procastimate_app/mainapp/profile_screen.dart';
 import 'package:procastimate_app/models/task.dart';
 import 'package:procastimate_app/models/task_data.dart';
-import 'package:procastimate_app/mainapp/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final String? email;
@@ -21,46 +21,98 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 1;
-  String _savedName = ''; // loaded from SharedPreferences
+  String _username = ''; // ✅ Unified to match all references
+  String? _photoUrl;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    loadTasks();
-    _loadUserName();
+    _initUserAndTasks();
   }
 
+  Future<void> _initUserAndTasks() async {
+    await _loadUserName();
+    await loadTasks();
+    setState(() => _loading = false);
+  }
+
+  /// ✅ Safe username loader
   Future<void> _loadUserName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('username') ?? '';
-    setState(() {
-      _savedName = name;
-    });
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data();
+        setState(() {
+          _username = data?['username'] ??
+              user.displayName ??
+              user.email?.split('@').first ??
+              'User';
+          _photoUrl = data?['photoUrl'];
+        });
+      } else {
+        setState(() {
+          _username = user.displayName ?? user.email?.split('@').first ?? 'User';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading username: $e');
+      setState(() {
+        _username = user.displayName ?? user.email?.split('@').first ?? 'User';
+      });
+    }
   }
 
   Future<void> saveTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = jsonEncode(
-      tasksByDate.map((key, tasks) => MapEntry(
-            key,
-            tasks.map((t) => t.toJson()).toList(),
-          )),
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+
+    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final Map<String, dynamic> taskMap = tasksByDate.map(
+      (key, tasks) => MapEntry(key, tasks.map((t) => t.toJson()).toList()),
     );
-    await prefs.setString('tasksByDate', jsonString);
+
+    try {
+      await userDoc.set({'tasksByDate': taskMap}, SetOptions(merge: true));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tasks saved to cloud.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save tasks: $e')),
+      );
+    }
   }
 
   Future<void> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString('tasksByDate');
-    if (jsonString != null) {
-      final Map<String, dynamic> decoded = jsonDecode(jsonString);
-      setState(() {
-        tasksByDate.clear();
-        decoded.forEach((key, list) {
-          tasksByDate[key] =
-              (list as List).map((t) => Task.fromJson(t)).toList();
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (doc.exists && doc.data()?['tasksByDate'] != null) {
+        final Map<String, dynamic> decoded =
+            Map<String, dynamic>.from(doc.data()!['tasksByDate']);
+        setState(() {
+          tasksByDate.clear();
+          decoded.forEach((key, list) {
+            tasksByDate[key] =
+                (list as List).map((t) => Task.fromJson(t)).toList();
+          });
         });
-      });
+      }
+    } catch (e) {
+      debugPrint('Error loading tasks: $e');
     }
   }
 
@@ -76,16 +128,16 @@ class _MainScreenState extends State<MainScreen> {
     saveTasks();
   }
 
-  // Open add task dialog for a specific dateKey (existing date group) with due date option
-  void _openCreateTaskDialogForDate(String dateKey) {
+  void _openCreateTaskDialogForDate(String dateKey) =>
+      _openTaskDialog(existingDate: dateKey);
+
+  void _openCreateTaskDialog() => _openTaskDialog();
+
+  void _openTaskDialog({String? existingDate}) {
     final titleController = TextEditingController();
     final descController = TextEditingController();
-    DateTime? dueDate = DateTime.tryParse(dateKey);
-
-    String dueDateLabel() {
-      if (dueDate == null) return "No due date";
-      return DateFormat('MM/dd/yyyy HH:mm').format(dueDate!);
-    }
+    DateTime? dueDate =
+        existingDate != null ? DateTime.tryParse(existingDate) : null;
 
     showDialog(
       context: context,
@@ -102,125 +154,8 @@ class _MainScreenState extends State<MainScreen> {
               if (pickedDate != null) {
                 final pickedTime = await showTimePicker(
                   context: context,
-                  initialTime: dueDate != null
-                      ? TimeOfDay.fromDateTime(dueDate!)
-                      : const TimeOfDay(hour: 12, minute: 0),
-                );
-                final finalTime =
-                    pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
-                setDialogState(() {
-                  dueDate = DateTime(pickedDate.year, pickedDate.month,
-                      pickedDate.day, finalTime.hour, finalTime.minute);
-                });
-              }
-            }
-
-            return AlertDialog(
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              title: const Text("Add Task"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                        controller: titleController,
-                        decoration: const InputDecoration(labelText: "Title")),
-                    TextField(
-                        controller: descController,
-                        decoration:
-                            const InputDecoration(labelText: "Description")),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text("Due: ${dueDateLabel()}"),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.calendar_today),
-                          onPressed: () async {
-                            await pickDateTime();
-                          },
-                        ),
-                        if (dueDate != null)
-                          IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              setDialogState(() {
-                                dueDate = null;
-                              });
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Tip: leave as 'No due date' to skip grouping by date.",
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancel")),
-                ElevatedButton(
-                  onPressed: () {
-                    if (titleController.text.isNotEmpty) {
-                      final task = Task(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: titleController.text,
-                        description: descController.text,
-                        dueDate: dueDate,
-                      );
-                      setState(() => addTask(task));
-                      saveTasks();
-                      Navigator.pop(context);
-                    }
-                  },
-                  child: const Text("Save"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // Open add task dialog (general) — due date is OPTIONAL now
-  void _openCreateTaskDialog() {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    DateTime? dueDate;
-
-    String dueDateLabel() {
-      if (dueDate == null) return "No due date";
-      return DateFormat('MM/dd/yyyy HH:mm').format(dueDate!);
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> pickDateTime() async {
-              final pickedDate = await showDatePicker(
-                context: context,
-                initialDate: dueDate ?? DateTime.now(),
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2100),
-              );
-              if (pickedDate != null) {
-                final pickedTime = await showTimePicker(
-                  context: context,
-                  initialTime: dueDate != null
-                      ? TimeOfDay.fromDateTime(dueDate!)
-                      : const TimeOfDay(hour: 12, minute: 0),
+                  initialTime: TimeOfDay.fromDateTime(
+                      dueDate ?? DateTime.now().add(const Duration(hours: 1))),
                 );
                 final finalTime =
                     pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
@@ -235,50 +170,33 @@ class _MainScreenState extends State<MainScreen> {
               shape:
                   RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               title: const Text("Create Task"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                        controller: titleController,
-                        decoration: const InputDecoration(labelText: "Title")),
-                    TextField(
-                        controller: descController,
-                        decoration:
-                            const InputDecoration(labelText: "Description")),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text("Due: ${dueDateLabel()}"),
-                        ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(labelText: "Title")),
+                  TextField(
+                      controller: descController,
+                      decoration:
+                          const InputDecoration(labelText: "Description")),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Text(dueDate == null
+                              ? "No due date"
+                              : "Due: ${DateFormat('MM/dd/yyyy HH:mm').format(dueDate!)}")),
+                      IconButton(
+                          onPressed: pickDateTime,
+                          icon: const Icon(Icons.calendar_today)),
+                      if (dueDate != null)
                         IconButton(
-                          icon: const Icon(Icons.calendar_today),
-                          onPressed: () async {
-                            await pickDateTime();
-                          },
-                        ),
-                        if (dueDate != null)
-                          IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              setDialogState(() {
-                                dueDate = null;
-                              });
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Tip: leave as 'No due date' to skip grouping by date.",
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      ),
-                    ),
-                  ],
-                ),
+                            onPressed: () => setDialogState(() => dueDate = null),
+                            icon: const Icon(Icons.clear))
+                    ],
+                  )
+                ],
               ),
               actions: [
                 TextButton(
@@ -296,10 +214,6 @@ class _MainScreenState extends State<MainScreen> {
                       setState(() => addTask(task));
                       saveTasks();
                       Navigator.pop(context);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a title')),
-                      );
                     }
                   },
                   child: const Text("Save"),
@@ -324,7 +238,6 @@ class _MainScreenState extends State<MainScreen> {
         completed: !task.completed,
         completedAt: !task.completed ? DateTime.now() : null,
       );
-
       tasks[index] = updated;
       tasks.sort((a, b) {
         if (a.completed == b.completed) return 0;
@@ -336,9 +249,12 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final username = _savedName.isNotEmpty
-        ? _savedName
-        : (widget.email != null ? widget.email!.split('@').first : 'Guest');
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF7F3EF),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
@@ -346,7 +262,6 @@ class _MainScreenState extends State<MainScreen> {
         child: Column(
           children: [
             Container(
-              width: double.infinity,
               height: 72,
               color: Colors.brown.shade800,
               child: Padding(
@@ -354,19 +269,20 @@ class _MainScreenState extends State<MainScreen> {
                 child: Row(
                   children: [
                     InkWell(
-                      onTap: () {
-                        Navigator.of(context)
-                            .push(
-                              MaterialPageRoute(builder: (_) => const ProfileTab()),
-                            )
-                            .then((_) {
-                          _loadUserName();
-                        });
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ProfileTab()),
+                        );
+                        _loadUserName();
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(Icons.person, color: Colors.white, size: 26),
+                      child: CircleAvatar(
+                        backgroundColor: Colors.white24,
+                        backgroundImage:
+                            _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                        radius: 18,
+                        child: _photoUrl == null
+                            ? const Icon(Icons.person, color: Colors.white)
+                            : null,
                       ),
                     ),
                     const Spacer(),
@@ -380,16 +296,11 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                     ),
                     const Spacer(),
-                    InkWell(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(Icons.settings, color: Colors.white, size: 26),
+                    IconButton(
+                      icon: const Icon(Icons.settings,
+                          color: Colors.white, size: 26),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
                       ),
                     ),
                   ],
@@ -400,62 +311,67 @@ class _MainScreenState extends State<MainScreen> {
               padding: const EdgeInsets.only(top: 10, bottom: 14),
               child: Column(
                 children: [
-                  SizedBox(
-                    height: 100,
-                    child: Image.asset(
-                      'assets/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
-                    'Welcome, $username',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    'Welcome, $_username 👋',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Column(
-                  children: tasksByDate.entries.map((entry) {
-                    final dateKey = entry.key;
-                    final tasks = entry.value;
-                    final parsed = DateTime.tryParse(dateKey) ?? DateTime.now();
-                    final dateLabel =
-                        DateFormat("MMMM d, yyyy").format(parsed);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: _DateColumn(
-                        dateLabel: dateLabel,
-                        dateKey: dateKey,
-                        tasks: tasks,
-                        onToggleTask: (taskId) => _toggleTaskCompletion(dateKey, taskId),
-                        onDeleteTask: (taskId) => _deleteTask(dateKey, taskId),
-                        onAddTask: (key) => _openCreateTaskDialogForDate(key),
+              child: tasksByDate.isEmpty
+                  ? const Center(
+                      child: Text(
+                        "No tasks yet.\nTap below to add one!",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 16),
                       ),
-                    );
-                  }).toList(),
-                ),
-              ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Column(
+                        children: tasksByDate.entries.map((entry) {
+                          final dateKey = entry.key;
+                          final tasks = entry.value;
+                          final parsed =
+                              DateTime.tryParse(dateKey) ?? DateTime.now();
+                          final dateLabel =
+                              DateFormat("MMMM d, yyyy").format(parsed);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: _DateColumn(
+                              dateLabel: dateLabel,
+                              dateKey: dateKey,
+                              tasks: tasks,
+                              onToggleTask: (id) =>
+                                  _toggleTaskCompletion(dateKey, id),
+                              onDeleteTask: (id) => _deleteTask(dateKey, id),
+                              onAddTask: (k) => _openCreateTaskDialogForDate(k),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.all(16.0),
               child: SizedBox(
                 height: 56,
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _openCreateTaskDialog,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[400],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                  ),
-                  child: const Text(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text(
                     'CREATE TASK',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[400],
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28)),
+                  ),
+                  onPressed: _openCreateTaskDialog,
                 ),
               ),
             ),
@@ -467,15 +383,19 @@ class _MainScreenState extends State<MainScreen> {
         onTap: (i) {
           setState(() => _selectedIndex = i);
           if (i == 0) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen()));
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const CalendarScreen()));
           } else if (i == 2) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today), label: 'Calendar'),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart), label: 'Score'),
         ],
         selectedItemColor: Colors.brown.shade800,
         unselectedItemColor: Colors.grey.shade600,
@@ -487,14 +407,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
-
 class _DateColumn extends StatelessWidget {
   final String dateLabel;
   final String dateKey;
   final List<Task> tasks;
-  final Function(String) onToggleTask;
-  final Function(String) onDeleteTask;
-  final Function(String) onAddTask;
+  final void Function(String taskId) onToggleTask;
+  final void Function(String taskId) onDeleteTask;
+  final void Function(String dateKey) onAddTask;
 
   const _DateColumn({
     required this.dateLabel,
@@ -508,108 +427,88 @@ class _DateColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: Colors.white,
-      elevation: 3,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(dateLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 12),
-            ...tasks.map((task) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _TaskCard(
-                    task: task,
-                    onToggle: () => onToggleTask(task.id),
-                    onDelete: () => onDeleteTask(task.id),
-                  ),
-                )),
-            InkWell(
-              onTap: () => onAddTask(dateKey),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: const [
-                    Icon(Icons.add, color: Colors.green, size: 18),
-                    SizedBox(width: 6),
-                    Text("Add Task", style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TaskCard extends StatelessWidget {
-  final Task task;
-  final VoidCallback onToggle;
-  final VoidCallback onDelete;
-
-  const _TaskCard({
-    required this.task,
-    required this.onToggle,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: task.completed ? Colors.green[50] : Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // Header Row: Date + Add Task Button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  task.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    decoration: task.completed ? TextDecoration.lineThrough : null,
+                  dateLabel,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.brown,
                   ),
                 ),
-                if (task.dueDate != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      "Due: ${DateFormat('MM/dd HH:mm').format(task.dueDate!)}",
-                      style: const TextStyle(color: Colors.black54, fontSize: 12),
-                    ),
-                  ),
-                if (task.description != null && task.description!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(task.description!, style: const TextStyle(fontSize: 12)),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+                  onPressed: () => onAddTask(dateKey),
+                ),
               ],
             ),
-          ),
-          IconButton(
-            icon: Icon(
-              task.completed ? Icons.check_circle : Icons.check_circle_outline,
-              color: task.completed ? Colors.green : Colors.grey,
-            ),
-            onPressed: onToggle,
-          ),
-          if (task.completed)
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.redAccent),
-              onPressed: onDelete,
-            ),
-        ],
+            const SizedBox(height: 8),
+
+            // Task List
+            for (final task in tasks)
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: task.completed
+                      ? Colors.green.shade50
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: task.completed
+                        ? Colors.green.shade300
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  leading: Checkbox(
+                    value: task.completed,
+                    onChanged: (_) => onToggleTask(task.id),
+                    activeColor: Colors.green.shade400,
+                  ),
+                  title: Text(
+                    task.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      decoration: task.completed
+                          ? TextDecoration.lineThrough
+                          : TextDecoration.none,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (task.description != null &&
+                          task.description!.isNotEmpty)
+                        Text(task.description!,
+                            style: const TextStyle(fontSize: 13)),
+                      if (task.dueDate != null)
+                        Text(
+                          "Due: ${DateFormat('MM/dd HH:mm').format(task.dueDate!)}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                    ],
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => onDeleteTask(task.id),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

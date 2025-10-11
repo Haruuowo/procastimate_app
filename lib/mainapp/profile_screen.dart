@@ -1,12 +1,13 @@
-// profile_screen.dart
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:procastimate_app/models/task_data.dart';
 import 'package:procastimate_app/mainapp/calendar_screen.dart';
 import 'package:procastimate_app/mainapp/score_screen.dart';
 import 'package:procastimate_app/mainapp/main_screen.dart';
-import 'dart:io';
-import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -19,50 +20,133 @@ class _ProfileTabState extends State<ProfileTab> {
   int _selectedIndex = 1;
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
-  String _userName = "Your Name"; // default until loaded from prefs
+  String _userName = "Your Name";
+  String _photoUrl = "";
+
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
-    _loadUserName();
-    _loadProfileImage();
+    _loadProfile();
   }
 
-  // 🔄 Load saved name
-  Future<void> _loadUserName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('username');
-    if (saved != null && saved.isNotEmpty) {
+  Future<void> _loadProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      debugPrint("⚠️ No authenticated user found");
+      return;
+    }
+
+    try {
+      // Try loading from Firestore
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _userName = data['username'] ?? user.displayName ?? "Your Name";
+          _photoUrl = data['photoUrl'] ?? "";
+        });
+        return;
+      }
+
+      // If no Firestore data, create initial profile
+      await _firestore.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'email': user.email,
+        'username': user.displayName ?? "Your Name",
+        'photoUrl': "",
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      
       setState(() {
-        _userName = saved;
+        _userName = user.displayName ?? "Your Name";
+      });
+
+    } catch (e) {
+      debugPrint("⚠️ Firestore load failed: $e");
+      
+      // Fallback to local storage
+      final prefs = await SharedPreferences.getInstance();
+      final savedName = prefs.getString('username');
+      final savedImagePath = prefs.getString('profileImagePath');
+      
+      setState(() {
+        if (savedName != null) _userName = savedName;
+        if (savedImagePath != null) _profileImage = File(savedImagePath);
       });
     }
   }
 
-  // 💾 Save name
-  Future<void> _saveUserName(String name) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('username', name);
-  }
+  Future<void> _updateUserProfile({String? newName, File? newImage, String? imageUrl}) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
 
-  // 🔄 Load saved profile image
-  Future<void> _loadProfileImage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final imagePath = prefs.getString('profileImagePath');
-    if (imagePath != null && imagePath.isNotEmpty) {
+    try {
+      if (newName != null && newName.isNotEmpty) {
+        await user.updateDisplayName(newName);
+      }
+
+      // Handle local image
+      if (newImage != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profileImagePath', newImage.path);
+      }
+
+      // Update Firestore
+      await _firestore.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'email': user.email,
+        'username': newName ?? _userName,
+        'photoUrl': imageUrl ?? "", // Store URL if provided
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Update local state
       setState(() {
-        _profileImage = File(imagePath);
+        if (newName != null) _userName = newName;
+        if (imageUrl != null) _photoUrl = imageUrl;
+        if (newImage != null) _profileImage = newImage;
       });
+
+    } catch (e) {
+      debugPrint('⚠️ Profile update failed: $e');
     }
   }
 
-  // 💾 Save image path
-  Future<void> _saveProfileImage(String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('profileImagePath', path);
+  void _showImageUrlDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Image URL'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter image URL',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                _updateUserProfile(imageUrl: controller.text);
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
-  // 📸 Pick image (Camera or Gallery)
   Future<void> _pickImage() async {
     showModalBottomSheet(
       context: context,
@@ -75,11 +159,9 @@ class _ProfileTabState extends State<ProfileTab> {
               icon: const Icon(Icons.photo_library, size: 35),
               onPressed: () async {
                 Navigator.pop(context);
-                final XFile? image =
-                    await _picker.pickImage(source: ImageSource.gallery);
+                final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
                 if (image != null) {
-                  setState(() => _profileImage = File(image.path));
-                  _saveProfileImage(image.path);
+                  await _updateUserProfile(newImage: File(image.path));
                 }
               },
             ),
@@ -87,12 +169,17 @@ class _ProfileTabState extends State<ProfileTab> {
               icon: const Icon(Icons.camera_alt, size: 35),
               onPressed: () async {
                 Navigator.pop(context);
-                final XFile? image =
-                    await _picker.pickImage(source: ImageSource.camera);
+                final XFile? image = await _picker.pickImage(source: ImageSource.camera);
                 if (image != null) {
-                  setState(() => _profileImage = File(image.path));
-                  _saveProfileImage(image.path);
+                  await _updateUserProfile(newImage: File(image.path));
                 }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.link, size: 35),
+              onPressed: () {
+                Navigator.pop(context);
+                _showImageUrlDialog();
               },
             ),
           ],
@@ -101,70 +188,69 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // ✏️ Edit Name Dialog
-  void _showEditProfileDialog() {
-    TextEditingController nameController =
-        TextEditingController(text: _userName);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Profile'),
-          content: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(
-              labelText: 'Enter your name',
-            ),
+// Add this method inside the _ProfileTabState class
+void _showEditProfileDialog() {
+  final controller = TextEditingController(text: _userName);
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Edit Profile'),
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          labelText: 'Name',
+          hintText: 'Enter your name',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (controller.text.isNotEmpty) {
+              _updateUserProfile(newName: controller.text);
+            }
+            Navigator.pop(context);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.brown.shade800,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final newName = nameController.text.trim();
-                if (newName.isNotEmpty) {
-                  setState(() {
-                    _userName = newName;
-                  });
-                  await _saveUserName(newName);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
+          child: const Text('Save', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
     final allTasks = tasksByDate.values.expand((t) => t).toList();
     final completedCount = allTasks.where((t) => t.completed).length;
 
+    final imageProvider = _profileImage != null
+        ? FileImage(_profileImage!)
+        : (_photoUrl.isNotEmpty
+            ? NetworkImage(_photoUrl)
+            : const AssetImage('assets/profile_placeholder.png')
+                as ImageProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
       appBar: AppBar(
         backgroundColor: Colors.brown.shade800,
-        title: const Text(
-          'Profile',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Profile',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 26),
         child: Column(
           children: [
-            // PROFILE SECTION
+            // Profile Section
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -173,79 +259,58 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: CircleAvatar(
                       radius: 70,
                       backgroundColor: Colors.black12,
-                      backgroundImage: _profileImage != null
-                          ? FileImage(_profileImage!)
-                          : const AssetImage('assets/profile_placeholder.png')
-                              as ImageProvider,
-                      child: _profileImage == null
+                      backgroundImage: imageProvider,
+                      child: (_photoUrl.isEmpty && _profileImage == null)
                           ? const Icon(Icons.person,
                               size: 60, color: Colors.black54)
                           : null,
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 20),
-
-                // Points + Task summary + Name
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _userName,
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
+                    Text(_userName,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
                     Row(
                       children: const [
-                        Icon(Icons.stars_sharp, color: Colors.orange, size: 40),
+                        Icon(Icons.stars_sharp,
+                            color: Colors.orange, size: 40),
                         SizedBox(width: 6),
-                        Text(
-                          '0',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text('0',
+                            style: TextStyle(
+                                fontSize: 22, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Points obtained!\n',
-                      style: TextStyle(color: Colors.black, fontSize: 22),
-                    ),
-                    Text(
-                      '$completedCount Tasks completed',
-                      style:
-                          const TextStyle(color: Colors.black, fontSize: 15),
-                    ),
+                    const Text('Points obtained!',
+                        style: TextStyle(color: Colors.black, fontSize: 22)),
+                    Text('$completedCount Tasks completed',
+                        style:
+                            const TextStyle(color: Colors.black, fontSize: 15)),
                   ],
                 ),
               ],
             ),
 
             const SizedBox(height: 10),
-
-            // ✏️ Edit Profile Button
             ElevatedButton.icon(
               onPressed: _showEditProfileDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.brown.shade800,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+                    borderRadius: BorderRadius.circular(10)),
               ),
               icon: const Icon(Icons.edit, color: Colors.white),
-              label: const Text(
-                'Edit Profile',
-                style: TextStyle(color: Colors.white),
-              ),
+              label: const Text('Edit Profile',
+                  style: TextStyle(color: Colors.white)),
             ),
 
             const SizedBox(height: 30),
-
-            // TASK VIEW SECTION
+            // Task View Section
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -256,23 +321,16 @@ class _ProfileTabState extends State<ProfileTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Task View',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  const Text('Task View',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-
                   if (allTasks.isEmpty)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.all(16.0),
-                        child: Text(
-                          'No tasks available.',
-                          style: TextStyle(color: Colors.black54),
-                        ),
+                        child: Text('No tasks available.',
+                            style: TextStyle(color: Colors.black54)),
                       ),
                     )
                   else
@@ -285,10 +343,9 @@ class _ProfileTabState extends State<ProfileTab> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: const [
                             BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 3,
-                              offset: Offset(0, 2),
-                            ),
+                                color: Colors.black12,
+                                blurRadius: 3,
+                                offset: Offset(0, 2))
                           ],
                         ),
                         child: Column(
@@ -314,23 +371,11 @@ class _ProfileTabState extends State<ProfileTab> {
                                 ),
                               ],
                             ),
-                            Text(
-                              'Due: ${task.dueDate != null ? "${task.dueDate!.month}/${task.dueDate!.day} ${task.dueDate!.hour}:${task.dueDate!.minute.toString().padLeft(2, '0')}" : "No due date"}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.black54),
-                            ),
                             if (task.description != null &&
                                 task.description!.isNotEmpty)
-                              Text(
-                                task.description!,
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.black54),
-                              ),
-                            const Text(
-                              'Type: Project',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.black54),
-                            ),
+                              Text(task.description!,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.black54)),
                           ],
                         ),
                       ),
@@ -350,7 +395,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 MaterialPageRoute(builder: (_) => const CalendarScreen()));
           } else if (i == 1) {
             Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => MainScreen()));
+                MaterialPageRoute(builder: (_) => const MainScreen()));
           } else if (i == 2) {
             Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const ScoreScreen()));
