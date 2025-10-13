@@ -313,7 +313,7 @@ class _MainScreenState extends State<MainScreen> {
                 children: [
                   const SizedBox(height: 10),
                   Text(
-                    'Welcome, $_username 👋',
+                    'Welcome, $_username!',
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.w600),
                   ),
