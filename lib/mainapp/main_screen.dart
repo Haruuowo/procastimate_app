@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ Added for FirebaseAuth reference
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:procastimate_app/services/auth_service.dart';
 import 'package:procastimate_app/mainapp/settings_screen.dart';
 import 'package:procastimate_app/mainapp/calendar_screen.dart';
@@ -21,7 +21,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 1;
-  String _username = ''; // ✅ Unified to match all references
+  String _username = '';
   String? _photoUrl;
   bool _loading = true;
 
@@ -37,7 +37,6 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _loading = false);
   }
 
-  /// ✅ Safe username loader
   Future<void> _loadUserName() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -51,7 +50,8 @@ class _MainScreenState extends State<MainScreen> {
       if (doc.exists) {
         final data = doc.data();
         setState(() {
-          _username = data?['username'] ??
+          _username =
+              data?['username'] ??
               user.displayName ??
               user.email?.split('@').first ??
               'User';
@@ -59,7 +59,8 @@ class _MainScreenState extends State<MainScreen> {
         });
       } else {
         setState(() {
-          _username = user.displayName ?? user.email?.split('@').first ?? 'User';
+          _username =
+              user.displayName ?? user.email?.split('@').first ?? 'User';
         });
       }
     } catch (e) {
@@ -74,20 +75,19 @@ class _MainScreenState extends State<MainScreen> {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
 
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final userDoc = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid);
     final Map<String, dynamic> taskMap = tasksByDate.map(
       (key, tasks) => MapEntry(key, tasks.map((t) => t.toJson()).toList()),
     );
 
     try {
       await userDoc.set({'tasksByDate': taskMap}, SetOptions(merge: true));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tasks saved to cloud.')),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save tasks: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save tasks: $e')));
     }
   }
 
@@ -101,13 +101,15 @@ class _MainScreenState extends State<MainScreen> {
           .doc(user.uid)
           .get();
       if (doc.exists && doc.data()?['tasksByDate'] != null) {
-        final Map<String, dynamic> decoded =
-            Map<String, dynamic>.from(doc.data()!['tasksByDate']);
+        final Map<String, dynamic> decoded = Map<String, dynamic>.from(
+          doc.data()!['tasksByDate'],
+        );
         setState(() {
           tasksByDate.clear();
           decoded.forEach((key, list) {
-            tasksByDate[key] =
-                (list as List).map((t) => Task.fromJson(t)).toList();
+            tasksByDate[key] = (list as List)
+                .map((t) => Task.fromJson(t))
+                .toList();
           });
         });
       }
@@ -121,9 +123,7 @@ class _MainScreenState extends State<MainScreen> {
       final tasks = tasksByDate[dateKey];
       if (tasks == null) return;
       tasks.removeWhere((t) => t.id == taskId);
-      if (tasks.isEmpty) {
-        tasksByDate.remove(dateKey);
-      }
+      if (tasks.isEmpty) tasksByDate.remove(dateKey);
     });
     saveTasks();
   }
@@ -133,11 +133,19 @@ class _MainScreenState extends State<MainScreen> {
 
   void _openCreateTaskDialog() => _openTaskDialog();
 
-  void _openTaskDialog({String? existingDate}) {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
+  void _openTaskDialog({String? existingDate, Task? existingTask}) {
+    final titleController = TextEditingController(
+      text: existingTask?.title ?? '',
+    );
+    final subjectController = TextEditingController(
+      text: existingTask?.subject ?? '',
+    );
+    final descController = TextEditingController(
+      text: existingTask?.description ?? '',
+    );
     DateTime? dueDate =
-        existingDate != null ? DateTime.tryParse(existingDate) : null;
+        existingTask?.dueDate ??
+        (existingDate != null ? DateTime.tryParse(existingDate) : null);
 
     showDialog(
       context: context,
@@ -155,70 +163,161 @@ class _MainScreenState extends State<MainScreen> {
                 final pickedTime = await showTimePicker(
                   context: context,
                   initialTime: TimeOfDay.fromDateTime(
-                      dueDate ?? DateTime.now().add(const Duration(hours: 1))),
+                    dueDate ?? DateTime.now().add(const Duration(hours: 1)),
+                  ),
                 );
                 final finalTime =
                     pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
                 setDialogState(() {
-                  dueDate = DateTime(pickedDate.year, pickedDate.month,
-                      pickedDate.day, finalTime.hour, finalTime.minute);
+                  dueDate = DateTime(
+                    pickedDate.year,
+                    pickedDate.month,
+                    pickedDate.day,
+                    finalTime.hour,
+                    finalTime.minute,
+                  );
                 });
               }
             }
 
-            return AlertDialog(
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              title: const Text("Create Task"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(labelText: "Title")),
-                  TextField(
-                      controller: descController,
-                      decoration:
-                          const InputDecoration(labelText: "Description")),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Text(dueDate == null
-                              ? "No due date"
-                              : "Due: ${DateFormat('MM/dd/yyyy HH:mm').format(dueDate!)}")),
-                      IconButton(
-                          onPressed: pickDateTime,
-                          icon: const Icon(Icons.calendar_today)),
-                      if (dueDate != null)
-                        IconButton(
-                            onPressed: () => setDialogState(() => dueDate = null),
-                            icon: const Icon(Icons.clear))
-                    ],
-                  )
-                ],
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancel")),
-                ElevatedButton(
-                  onPressed: () {
-                    if (titleController.text.isNotEmpty) {
-                      final task = Task(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: titleController.text,
-                        description: descController.text,
-                        dueDate: dueDate,
-                      );
-                      setState(() => addTask(task));
-                      saveTasks();
-                      Navigator.pop(context);
-                    }
-                  },
-                  child: const Text("Save"),
+              child: Container(
+                width: 400,
+                height: 420,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      existingTask == null ? "Create Task" : "Edit Task",
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Swapped order: Title first, Subject second
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(labelText: "Title"),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: subjectController,
+                      decoration: const InputDecoration(labelText: "Subject"),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: TextField(
+                        controller: descController,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: "Description",
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            dueDate == null
+                                ? "No due date"
+                                : "Due: ${DateFormat('MM/dd/yyyy HH:mm').format(dueDate!)}",
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: pickDateTime,
+                          icon: const Icon(Icons.calendar_today),
+                        ),
+                        if (dueDate != null)
+                          IconButton(
+                            onPressed: () =>
+                                setDialogState(() => dueDate = null),
+                            icon: const Icon(Icons.clear),
+                          ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (existingTask != null)
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _deleteTask(
+                                existingDate ??
+                                    DateFormat(
+                                      'yyyy-MM-dd',
+                                    ).format(existingTask.dueDate!),
+                                existingTask.id,
+                              );
+                            },
+                            child: const Text(
+                              "Delete",
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Cancel"),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (titleController.text.isNotEmpty &&
+                                subjectController.text.isNotEmpty) {
+                              final newTask = Task(
+                                id:
+                                    existingTask?.id ??
+                                    DateTime.now().millisecondsSinceEpoch
+                                        .toString(),
+                                title: titleController.text,
+                                subject: subjectController.text,
+                                description: descController.text,
+                                dueDate: dueDate,
+                                completed: existingTask?.completed ?? false,
+                              );
+
+                              setState(() {
+                                if (existingTask != null) {
+                                  final dateKey = DateFormat(
+                                    'yyyy-MM-dd',
+                                  ).format(dueDate ?? DateTime.now());
+                                  final list = tasksByDate[dateKey];
+                                  if (list != null) {
+                                    final index = list.indexWhere(
+                                      (t) => t.id == existingTask.id,
+                                    );
+                                    if (index != -1) list[index] = newTask;
+                                  }
+                                } else {
+                                  addTask(newTask);
+                                }
+                              });
+                              saveTasks();
+                              Navigator.pop(context);
+                            }
+                          },
+                          child: Text(
+                            existingTask == null ? "Save" : "Save Changes",
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         );
@@ -232,7 +331,6 @@ class _MainScreenState extends State<MainScreen> {
       if (tasks == null) return;
       final index = tasks.indexWhere((t) => t.id == taskId);
       if (index == -1) return;
-
       final task = tasks[index];
       final updated = task.copyWith(
         completed: !task.completed,
@@ -261,6 +359,7 @@ class _MainScreenState extends State<MainScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Header
             Container(
               height: 72,
               color: Colors.brown.shade800,
@@ -277,8 +376,9 @@ class _MainScreenState extends State<MainScreen> {
                       },
                       child: CircleAvatar(
                         backgroundColor: Colors.white24,
-                        backgroundImage:
-                            _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                        backgroundImage: _photoUrl != null
+                            ? NetworkImage(_photoUrl!)
+                            : null,
                         radius: 18,
                         child: _photoUrl == null
                             ? const Icon(Icons.person, color: Colors.white)
@@ -292,15 +392,19 @@ class _MainScreenState extends State<MainScreen> {
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
-                        letterSpacing: 0.5,
                       ),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.settings,
-                          color: Colors.white, size: 26),
+                      icon: const Icon(
+                        Icons.settings,
+                        color: Colors.white,
+                        size: 26,
+                      ),
                       onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsScreen(),
+                        ),
                       ),
                     ),
                   ],
@@ -309,15 +413,12 @@ class _MainScreenState extends State<MainScreen> {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 14),
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  Text(
-                    'Welcome, $_username!',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ],
+              child: Text(
+                'Welcome, $_username 👋',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             Expanded(
@@ -337,8 +438,9 @@ class _MainScreenState extends State<MainScreen> {
                           final tasks = entry.value;
                           final parsed =
                               DateTime.tryParse(dateKey) ?? DateTime.now();
-                          final dateLabel =
-                              DateFormat("MMMM d, yyyy").format(parsed);
+                          final dateLabel = DateFormat(
+                            "MMMM d, yyyy",
+                          ).format(parsed);
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
                             child: _DateColumn(
@@ -349,6 +451,8 @@ class _MainScreenState extends State<MainScreen> {
                                   _toggleTaskCompletion(dateKey, id),
                               onDeleteTask: (id) => _deleteTask(dateKey, id),
                               onAddTask: (k) => _openCreateTaskDialogForDate(k),
+                              onEditTask: (task) =>
+                                  _openTaskDialog(existingTask: task),
                             ),
                           );
                         }).toList(),
@@ -369,7 +473,8 @@ class _MainScreenState extends State<MainScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[400],
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28)),
+                      borderRadius: BorderRadius.circular(28),
+                    ),
                   ),
                   onPressed: _openCreateTaskDialog,
                 ),
@@ -383,19 +488,22 @@ class _MainScreenState extends State<MainScreen> {
         onTap: (i) {
           setState(() => _selectedIndex = i);
           if (i == 0) {
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const CalendarScreen()));
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const CalendarScreen()));
           } else if (i == 2) {
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
           }
         },
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today), label: 'Calendar'),
+            icon: Icon(Icons.calendar_today),
+            label: 'Calendar',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart), label: 'Score'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
         ],
         selectedItemColor: Colors.brown.shade800,
         unselectedItemColor: Colors.grey.shade600,
@@ -407,6 +515,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
+
 class _DateColumn extends StatelessWidget {
   final String dateLabel;
   final String dateKey;
@@ -414,6 +523,7 @@ class _DateColumn extends StatelessWidget {
   final void Function(String taskId) onToggleTask;
   final void Function(String taskId) onDeleteTask;
   final void Function(String dateKey) onAddTask;
+  final void Function(Task task) onEditTask;
 
   const _DateColumn({
     required this.dateLabel,
@@ -422,6 +532,7 @@ class _DateColumn extends StatelessWidget {
     required this.onToggleTask,
     required this.onDeleteTask,
     required this.onAddTask,
+    required this.onEditTask,
   });
 
   @override
@@ -435,7 +546,7 @@ class _DateColumn extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row: Date + Add Task Button
+            // Header Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -448,66 +559,100 @@ class _DateColumn extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+                  icon: const Icon(
+                    Icons.add_circle_outline,
+                    color: Colors.green,
+                  ),
                   onPressed: () => onAddTask(dateKey),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-
-            // Task List
             for (final task in tasks)
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                decoration: BoxDecoration(
-                  color: task.completed
-                      ? Colors.green.shade50
-                      : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: task.completed
-                        ? Colors.green.shade300
-                        : Colors.grey.shade300,
-                  ),
-                ),
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  leading: Checkbox(
-                    value: task.completed,
-                    onChanged: (_) => onToggleTask(task.id),
-                    activeColor: Colors.green.shade400,
-                  ),
-                  title: Text(
-                    task.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      decoration: task.completed
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
-                    ),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (task.description != null &&
-                          task.description!.isNotEmpty)
-                        Text(task.description!,
-                            style: const TextStyle(fontSize: 13)),
-                      if (task.dueDate != null)
-                        Text(
-                          "Due: ${DateFormat('MM/dd HH:mm').format(task.dueDate!)}",
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                    ],
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => onDeleteTask(task.id),
-                  ),
-                ),
+              _HoverableTaskCard(
+                task: task,
+                onToggle: () => onToggleTask(task.id),
+                onTap: () => onEditTask(task),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HoverableTaskCard extends StatefulWidget {
+  final Task task;
+  final VoidCallback onToggle;
+  final VoidCallback onTap;
+
+  const _HoverableTaskCard({
+    required this.task,
+    required this.onToggle,
+    required this.onTap,
+  });
+
+  @override
+  State<_HoverableTaskCard> createState() => _HoverableTaskCardState();
+}
+
+class _HoverableTaskCardState extends State<_HoverableTaskCard> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: _hovering
+                ? Colors.grey.shade200
+                : (widget.task.completed
+                      ? Colors.green.shade50
+                      : Colors.grey.shade100),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: widget.task.completed
+                  ? Colors.green.shade300
+                  : Colors.grey.shade300,
+            ),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            leading: Checkbox(
+              value: widget.task.completed,
+              onChanged: (_) => widget.onToggle(),
+              activeColor: Colors.green.shade400,
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Swapped order here: Title bold, Subject gray
+                Text(
+                  widget.task.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                if (widget.task.subject != null)
+                  Text(
+                    widget.task.subject!,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
