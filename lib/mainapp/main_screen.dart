@@ -75,7 +75,8 @@ class _MainScreenState extends State<MainScreen> {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
 
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final userDoc =
+        FirebaseFirestore.instance.collection('users').doc(user.uid);
     final Map<String, dynamic> taskMap = tasksByDate.map(
       (key, tasks) => MapEntry(key, tasks.map((t) => t.toJson()).toList()),
     );
@@ -99,13 +100,13 @@ class _MainScreenState extends State<MainScreen> {
           .doc(user.uid)
           .get();
       if (doc.exists && doc.data()?['tasksByDate'] != null) {
-        final Map<String, dynamic> decoded = Map<String, dynamic>.from(
-          doc.data()!['tasksByDate'],
-        );
+        final Map<String, dynamic> decoded =
+            Map<String, dynamic>.from(doc.data()!['tasksByDate']);
         setState(() {
           tasksByDate.clear();
           decoded.forEach((key, list) {
-            tasksByDate[key] = (list as List).map((t) => Task.fromJson(t)).toList();
+            tasksByDate[key] =
+                (list as List).map((t) => Task.fromJson(t)).toList();
           });
         });
       }
@@ -124,20 +125,23 @@ class _MainScreenState extends State<MainScreen> {
     saveTasks();
   }
 
-  void _openCreateTaskDialogForDate(String dateKey) => _openTaskDialog(existingDate: dateKey);
+  void _openCreateTaskDialogForDate(String dateKey) =>
+      _openTaskDialog(existingDate: dateKey);
 
   void _openCreateTaskDialog() => _openTaskDialog();
+void _openTaskDialog({String? existingDate, Task? existingTask}) {
+  final titleController = TextEditingController(text: existingTask?.title ?? '');
+  final subjectController = TextEditingController(text: existingTask?.subject ?? '');
+  final descController = TextEditingController(text: existingTask?.description ?? '');
+  DateTime? dueDate = existingTask?.dueDate ?? (existingDate != null ? DateTime.tryParse(existingDate) : null);
 
-  void _openTaskDialog({String? existingDate, Task? existingTask}) {
-    final titleController = TextEditingController(text: existingTask?.title ?? '');
-    final subjectController = TextEditingController(text: existingTask?.subject ?? '');
-    final descController = TextEditingController(text: existingTask?.description ?? '');
-    DateTime? dueDate = existingTask?.dueDate ?? (existingDate != null ? DateTime.tryParse(existingDate) : null);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
+  showDialog(
+    context: context,
+    builder: (context) {
+      return MediaQuery.removeViewInsets(   // 🛡 Prevent keyboard overflow
+        context: context,
+        removeBottom: true,
+        child: StatefulBuilder(
           builder: (context, setDialogState) {
             Future<void> pickDateTime() async {
               final pickedDate = await showDatePicker(
@@ -146,139 +150,168 @@ class _MainScreenState extends State<MainScreen> {
                 firstDate: DateTime(2020),
                 lastDate: DateTime(2100),
               );
+
               if (pickedDate != null) {
                 final pickedTime = await showTimePicker(
                   context: context,
                   initialTime: TimeOfDay.fromDateTime(dueDate ?? DateTime.now().add(const Duration(hours: 1))),
                 );
+
                 final finalTime = pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
+
                 setDialogState(() {
                   dueDate = DateTime(
-                    pickedDate.year,
-                    pickedDate.month,
-                    pickedDate.day,
-                    finalTime.hour,
-                    finalTime.minute,
+                    pickedDate.year, pickedDate.month, pickedDate.day,
+                    finalTime.hour, finalTime.minute,
                   );
                 });
               }
             }
 
-            return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Container(
-                width: 400,
-                height: 420,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      existingTask == null ? "Create Task" : "Edit Task",
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(labelText: "Title"),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: subjectController,
-                      decoration: const InputDecoration(labelText: "Subject"),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: TextField(
-                        controller: descController,
-                        maxLines: 4,
-                        decoration: const InputDecoration(border: InputBorder.none, hintText: "Description"),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            dueDate == null
-                                ? "No due date"
-                                : "Due: ${DateFormat('MMM d, yyyy • h:mm a').format(dueDate!)}",
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: pickDateTime,
-                          icon: const Icon(Icons.calendar_today),
-                        ),
-                        if (dueDate != null)
-                          IconButton(
-                            onPressed: () => setDialogState(() => dueDate = null),
-                            icon: const Icon(Icons.clear),
-                          ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (existingTask != null)
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _deleteTask(
-                                existingDate ?? DateFormat('yyyy-MM-dd').format(existingTask.dueDate ?? DateTime.now()),
-                                existingTask.id,
-                              );
-                            },
-                            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-                          ),
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () {
-                            if (titleController.text.isNotEmpty && subjectController.text.isNotEmpty) {
-                              final newTask = Task(
-                                id: existingTask?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                                title: titleController.text,
-                                subject: subjectController.text,
-                                description: descController.text,
-                                dueDate: dueDate,
-                                completed: existingTask?.completed ?? false,
-                              );
+           return Dialog(
+  insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  child: LayoutBuilder(
+    builder: (context, constraints) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: constraints.maxHeight * 0.95, // Fit within screen
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                existingTask == null ? "Create Task" : "Edit Task",
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
 
-                              setState(() {
-                                if (existingTask != null) {
-                                  final dateKey = DateFormat('yyyy-MM-dd').format(dueDate ?? DateTime.now());
-                                  final list = tasksByDate[dateKey];
-                                  if (list != null) {
-                                    final index = list.indexWhere((t) => t.id == existingTask.id);
-                                    if (index != -1) list[index] = newTask;
-                                  }
-                                } else {
-                                  addTask(newTask);
-                                }
-                              });
-                              saveTasks();
-                              Navigator.pop(context);
-                            }
-                          },
-                          child: Text(existingTask == null ? "Save" : "Save Changes"),
-                        ),
-                      ],
-                    ),
-                  ],
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(labelText: "Title"),
+              ),
+              const SizedBox(height: 8),
+
+              TextField(
+                controller: subjectController,
+                decoration: const InputDecoration(labelText: "Subject"),
+              ),
+              const SizedBox(height: 8),
+
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: TextField(
+                  controller: descController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: "Description",
+                  ),
                 ),
               ),
-            );
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      dueDate == null
+                          ? "No due date"
+                          : "Due: ${DateFormat('MMM d, yyyy • h:mm a').format(dueDate!)}",
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: pickDateTime,
+                    icon: const Icon(Icons.calendar_today),
+                  ),
+                  if (dueDate != null)
+                    IconButton(
+                      onPressed: () => setDialogState(() => dueDate = null),
+                      icon: const Icon(Icons.clear),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (existingTask != null)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deleteTask(
+                          existingDate ??
+                              DateFormat('yyyy-MM-dd')
+                                  .format(existingTask.dueDate ?? DateTime.now()),
+                          existingTask.id,
+                        );
+                      },
+                      child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                    ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel"),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (titleController.text.isNotEmpty &&
+                          subjectController.text.isNotEmpty) {
+                        final newTask = Task(
+                          id: existingTask?.id ??
+                              DateTime.now().millisecondsSinceEpoch.toString(),
+                          title: titleController.text,
+                          subject: subjectController.text,
+                          description: descController.text,
+                          dueDate: dueDate,
+                          completed: existingTask?.completed ?? false,
+                        );
+
+                        setState(() {
+                          if (existingTask != null) {
+                            final dateKey = DateFormat('yyyy-MM-dd')
+                                .format(dueDate ?? DateTime.now());
+                            final list = tasksByDate[dateKey];
+                            if (list != null) {
+                              final index = list.indexWhere((t) => t.id == existingTask.id);
+                              if (index != -1) list[index] = newTask;
+                            }
+                          } else {
+                            addTask(newTask);
+                          }
+                        });
+
+                        saveTasks();
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: Text(existingTask == null ? "Save" : "Save Changes"),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  ),
+);
+
           },
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
+
 
   void _toggleTaskCompletion(String dateKey, String taskId) {
     setState(() {
@@ -301,7 +334,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   String _formatDueDateShort(DateTime date) {
-    // Format example: Feb 14, 2025 • 3:30 PM
     return DateFormat('MMM d, yyyy • h:mm a').format(date);
   }
 
@@ -313,6 +345,10 @@ class _MainScreenState extends State<MainScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
+    // 🔽 Sort tasks chronologically by date key
+    final sortedEntries = tasksByDate.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
@@ -328,25 +364,37 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     InkWell(
                       onTap: () async {
-                        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileTab()));
+                        await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const ProfileTab()));
                         _loadUserName();
                       },
                       child: CircleAvatar(
                         backgroundColor: Colors.white24,
-                        backgroundImage: _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                        backgroundImage: _photoUrl != null
+                            ? NetworkImage(_photoUrl!)
+                            : null,
                         radius: 18,
-                        child: _photoUrl == null ? const Icon(Icons.person, color: Colors.white) : null,
+                        child: _photoUrl == null
+                            ? const Icon(Icons.person, color: Colors.white)
+                            : null,
                       ),
                     ),
                     const Spacer(),
                     const Text(
                       "Procastimate",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 20),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.settings, color: Colors.white, size: 26),
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                      icon: const Icon(Icons.settings,
+                          color: Colors.white, size: 26),
+                      onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const SettingsScreen())),
                     ),
                   ],
                 ),
@@ -356,7 +404,8 @@ class _MainScreenState extends State<MainScreen> {
               padding: const EdgeInsets.only(top: 10, bottom: 14),
               child: Text(
                 'Welcome, $_username 👋',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w600),
               ),
             ),
             Expanded(
@@ -365,27 +414,36 @@ class _MainScreenState extends State<MainScreen> {
                       child: Text(
                         "No tasks yet.\nTap below to add one!",
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                        style:
+                            TextStyle(color: Colors.grey, fontSize: 16),
                       ),
                     )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12),
                       child: Column(
-                        children: tasksByDate.entries.map((entry) {
+                        children: sortedEntries.map((entry) {
                           final dateKey = entry.key;
                           final tasks = entry.value;
-                          final parsed = DateTime.tryParse(dateKey) ?? DateTime.now();
-                          final dateLabel = DateFormat("MMMM d, yyyy").format(parsed);
+                          final parsed = DateTime.tryParse(dateKey) ??
+                              DateTime.now();
+                          final dateLabel =
+                              DateFormat("MMMM d, yyyy").format(parsed);
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
+                            padding:
+                                const EdgeInsets.only(bottom: 16.0),
                             child: _DateColumn(
                               dateLabel: dateLabel,
                               dateKey: dateKey,
                               tasks: tasks,
-                              onToggleTask: (id) => _toggleTaskCompletion(dateKey, id),
-                              onDeleteTask: (id) => _deleteTask(dateKey, id),
-                              onAddTask: (k) => _openCreateTaskDialogForDate(k),
-                              onEditTask: (task) => _openTaskDialog(existingTask: task),
+                              onToggleTask: (id) =>
+                                  _toggleTaskCompletion(dateKey, id),
+                              onDeleteTask: (id) =>
+                                  _deleteTask(dateKey, id),
+                              onAddTask: (k) =>
+                                  _openCreateTaskDialogForDate(k),
+                              onEditTask: (task) =>
+                                  _openTaskDialog(existingTask: task),
                               formatDue: _formatDueDateShort,
                             ),
                           );
@@ -402,11 +460,13 @@ class _MainScreenState extends State<MainScreen> {
                   icon: const Icon(Icons.add, color: Colors.white),
                   label: const Text(
                     'CREATE TASK',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[400],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28)),
                   ),
                   onPressed: _openCreateTaskDialog,
                 ),
@@ -420,15 +480,20 @@ class _MainScreenState extends State<MainScreen> {
         onTap: (i) {
           setState(() => _selectedIndex = i);
           if (i == 0) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen()));
+            Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const CalendarScreen()));
           } else if (i == 2) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
+            Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const ScoreScreen()));
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today), label: 'Calendar'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart), label: 'Score'),
         ],
         selectedItemColor: Colors.brown.shade800,
         unselectedItemColor: Colors.grey.shade600,
@@ -478,10 +543,14 @@ class _DateColumn extends StatelessWidget {
               children: [
                 Text(
                   dateLabel,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.brown),
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.brown),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+                  icon: const Icon(Icons.add_circle_outline,
+                      color: Colors.green),
                   onPressed: () => onAddTask(dateKey),
                 ),
               ],
@@ -538,13 +607,14 @@ class _HoverableTaskCardState extends State<_HoverableTaskCard> {
       fontSize: 15,
       fontWeight: FontWeight.bold,
       color: isCompleted ? Colors.grey.shade600 : Colors.black87,
-      decoration: isCompleted ? TextDecoration.lineThrough : TextDecoration.none,
+      decoration:
+          isCompleted ? TextDecoration.lineThrough : TextDecoration.none,
     );
 
-    final subjectStyle = TextStyle(
-      fontSize: 13,
-      color: isCompleted ? Colors.grey.shade500 : Colors.grey,
-    );
+      final subjectStyle = TextStyle(
+        fontSize: 13,
+        color: isCompleted ? Colors.grey.shade500 : Colors.grey,
+      );
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
