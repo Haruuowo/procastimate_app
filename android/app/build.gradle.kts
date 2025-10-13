@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.example.procastimate_app"
-    compileSdk = 34
+    compileSdk = 35
     ndkVersion = "27.0.12077973" // 🔥 Force the correct NDK version
 
     compileOptions {
@@ -25,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.example.procastimate_app"
         minSdk = 23              // 🔥 Firebase requires at least 23
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
     }
