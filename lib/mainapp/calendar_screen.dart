@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:procastimate_app/models/task.dart';
 import 'package:procastimate_app/models/task_data.dart';
 import 'package:procastimate_app/mainapp/profile_screen.dart';
@@ -20,6 +22,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _selectedDay;
   int _selectedIndex = 0;
 
+  String? _photoUrl;
+  bool _loadingUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (mounted) {
+      setState(() {
+        _photoUrl = doc.data()?['photoUrl'];
+        _loadingUser = false;
+      });
+    }
+  }
+
   List<Task> _getTasksForDay(DateTime day) {
     final key = DateFormat('yyyy-MM-dd').format(day);
     return (tasksByDate[key] ?? []).where((t) => !t.completed).toList();
@@ -28,28 +56,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _onItemTapped(int i) {
     setState(() => _selectedIndex = i);
     if (i == 1) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const MainScreen()));
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+      );
     } else if (i == 2) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ScoreScreen()),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedTasks = _selectedDay != null
-        ? _getTasksForDay(_selectedDay!)
-        : [];
+    final selectedTasks =
+        _selectedDay != null ? _getTasksForDay(_selectedDay!) : [];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 TOP APP BAR (copied from main_screen)
+            // 🔹 TOP APP BAR (Same as MainScreen)
             Container(
               width: double.infinity,
               height: 72,
@@ -59,23 +86,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: Row(
                   children: [
                     InkWell(
-                      onTap: () {
-                        Navigator.of(context)
-                            .push(
-                              MaterialPageRoute(
-                                builder: (_) => const ProfileTab(),
-                              ),
-                            )
-                            .then((_) => setState(() {}));
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ProfileTab(),
+                          ),
+                        );
+                        _loadUserData(); // Refresh after returning
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 26,
-                        ),
+                      child: CircleAvatar(
+                        backgroundColor: Colors.white24,
+                        backgroundImage:
+                            _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                        radius: 18,
+                        child: _photoUrl == null
+                            ? const Icon(Icons.person, color: Colors.white)
+                            : null,
                       ),
                     ),
                     const Spacer(),
@@ -89,23 +115,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       ),
                     ),
                     const Spacer(),
-                    InkWell(
-                      onTap: () {
+                    IconButton(
+                      icon: const Icon(Icons.settings,
+                          color: Colors.white, size: 26),
+                      onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const SettingsScreen(),
                           ),
                         );
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(
-                          Icons.settings,
-                          color: Colors.white,
-                          size: 26,
-                        ),
-                      ),
                     ),
                   ],
                 ),
@@ -226,7 +245,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
 
-      // 🔹 BOTTOM NAVIGATION BAR (same as main_screen)
+      // 🔹 BOTTOM NAVIGATION BAR
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
