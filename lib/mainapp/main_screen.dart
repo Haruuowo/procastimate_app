@@ -167,145 +167,140 @@ void _openTaskDialog({String? existingDate, Task? existingTask}) {
                 });
               }
             }
-
-           return Dialog(
-  insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  child: LayoutBuilder(
-    builder: (context, constraints) {
-      return ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: constraints.maxHeight * 0.95, // Fit within screen
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                existingTask == null ? "Create Task" : "Edit Task",
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: "Title"),
-              ),
-              const SizedBox(height: 8),
-
-              TextField(
-                controller: subjectController,
-                decoration: const InputDecoration(labelText: "Subject"),
-              ),
-              const SizedBox(height: 8),
-
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: TextField(
-                  controller: descController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: "Description",
+return Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight * 0.95, // Fit within screen
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          existingTask == null ? "Create Task" : "Edit Task",
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: titleController,
+                          decoration: const InputDecoration(labelText: "Title"),
+                        ),
+                        const SizedBox(height: 8),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      dueDate == null
-                          ? "No due date"
-                          : "Due: ${DateFormat('MMM d, yyyy • h:mm a').format(dueDate!)}",
+                        TextField(
+                          controller: subjectController,
+                          decoration: const InputDecoration(labelText: "Subject"),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: TextField(
+                            controller: descController,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              hintText: "Description",
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                dueDate == null
+                                    ? "No due date"
+                                    : "Due: ${DateFormat('MMM d, yyyy • h:mm a').format(dueDate!)}",
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: pickDateTime,
+                              icon: const Icon(Icons.calendar_today),
+                            ),
+                            if (dueDate != null)
+                              IconButton(
+                                onPressed: () => setDialogState(() => dueDate = null),
+                                icon: const Icon(Icons.clear),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (existingTask != null)
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _deleteTask(
+                                    existingDate ??
+                                        DateFormat('yyyy-MM-dd')
+                                            .format(existingTask.dueDate ?? DateTime.now()),
+                                    existingTask.id,
+                                  );
+                                },
+                                child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                              ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text("Cancel"),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () {
+                                if (titleController.text.isNotEmpty &&
+                                    subjectController.text.isNotEmpty) {
+                                  final newTask = Task(
+                                    id: existingTask?.id ??
+                                        DateTime.now().millisecondsSinceEpoch.toString(),
+                                    title: titleController.text,
+                                    subject: subjectController.text,
+                                    description: descController.text,
+                                    dueDate: dueDate,
+                                    completed: existingTask?.completed ?? false,
+                                  );
+
+                                  setState(() {
+                                    if (existingTask != null) {
+                                      final dateKey = DateFormat('yyyy-MM-dd')
+                                          .format(dueDate ?? DateTime.now());
+                                      final list = tasksByDate[dateKey];
+                                      if (list != null) {
+                                        final index = list.indexWhere((t) => t.id == existingTask.id);
+                                        if (index != -1) list[index] = newTask;
+                                      }
+                                    } else {
+                                      addTask(newTask);
+                                    }
+                                  });
+
+                                  saveTasks();
+                                  Navigator.pop(context);
+                                }
+                              },
+                              child: Text(existingTask == null ? "Save" : "Save Changes"),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: pickDateTime,
-                    icon: const Icon(Icons.calendar_today),
-                  ),
-                  if (dueDate != null)
-                    IconButton(
-                      onPressed: () => setDialogState(() => dueDate = null),
-                      icon: const Icon(Icons.clear),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (existingTask != null)
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _deleteTask(
-                          existingDate ??
-                              DateFormat('yyyy-MM-dd')
-                                  .format(existingTask.dueDate ?? DateTime.now()),
-                          existingTask.id,
-                        );
-                      },
-                      child: const Text("Delete", style: TextStyle(color: Colors.red)),
-                    ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancel"),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () {
-                      if (titleController.text.isNotEmpty &&
-                          subjectController.text.isNotEmpty) {
-                        final newTask = Task(
-                          id: existingTask?.id ??
-                              DateTime.now().millisecondsSinceEpoch.toString(),
-                          title: titleController.text,
-                          subject: subjectController.text,
-                          description: descController.text,
-                          dueDate: dueDate,
-                          completed: existingTask?.completed ?? false,
-                        );
-
-                        setState(() {
-                          if (existingTask != null) {
-                            final dateKey = DateFormat('yyyy-MM-dd')
-                                .format(dueDate ?? DateTime.now());
-                            final list = tasksByDate[dateKey];
-                            if (list != null) {
-                              final index = list.indexWhere((t) => t.id == existingTask.id);
-                              if (index != -1) list[index] = newTask;
-                            }
-                          } else {
-                            addTask(newTask);
-                          }
-                        });
-
-                        saveTasks();
-                        Navigator.pop(context);
-                      }
-                    },
-                    child: Text(existingTask == null ? "Save" : "Save Changes"),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  ),
-);
-
-          },
+                );
+              },
+            ),
+          );
+        },
         ),
       );
     },
