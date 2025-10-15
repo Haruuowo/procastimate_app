@@ -50,7 +50,7 @@ class Task {
     'id': id,
     'title': title,
     'description': description,
-    'subject': subject, // ✅ Added
+    'subject': subject,
     'createdAt': createdAt.toIso8601String(),
     'dueDate': dueDate?.toIso8601String(),
     'completedAt': completedAt?.toIso8601String(),
@@ -62,7 +62,7 @@ class Task {
     id: json['id'],
     title: json['title'],
     description: json['description'],
-    subject: json['subject'], // ✅ Added
+    subject: json['subject'],
     createdAt: DateTime.parse(json['createdAt']),
     dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
     completedAt: json['completedAt'] != null
