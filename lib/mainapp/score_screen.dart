@@ -1,3 +1,6 @@
+// ignore_for_file: unused_field
+
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -30,7 +33,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
     super.initState();
     _loadScore();
     _loadCompletedTasks();
-    _loadUserData(); // ✅ Load the user's profile photo
+    _loadUserData();
   }
 
   Future<void> _loadUserData() async {
@@ -50,8 +53,16 @@ class _ScoreScreenState extends State<ScoreScreen> {
 
   Future<void> _loadScore() async {
     final prefs = await SharedPreferences.getInstance();
+    int savedScore = prefs.getInt('score') ?? 0;
+
+    // Reset after 100 points (water overflows)
+    if (savedScore >= 100) {
+      savedScore = 0;
+      prefs.setInt('score', 0);
+    }
+
     setState(() {
-      score = prefs.getInt('score') ?? 0;
+      score = savedScore;
     });
   }
 
@@ -85,54 +96,54 @@ class _ScoreScreenState extends State<ScoreScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 TOP APP BAR (matches CalendarScreen)
-Container(
-  width: double.infinity,
-  height: 72,
-  color: Colors.brown.shade800,
-  padding: const EdgeInsets.symmetric(horizontal: 16),
-  child: Row(
-    children: [
-      InkWell(
-        onTap: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ProfileTab()),
-          );
-          _loadUserData(); // refresh on return
-        },
-        borderRadius: BorderRadius.circular(50),
-        child: CircleAvatar(
-          radius: 22,
-          backgroundColor: Colors.white24,
-          backgroundImage:
-              _photoUrl != null ? NetworkImage(_photoUrl!) : null,
-          child: _photoUrl == null
-              ? const Icon(Icons.person, color: Colors.white, size: 26)
-              : null,
-        ),
-      ),
-      const Spacer(),
-      const Text(
-        "Procastimate",
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 20,
-          letterSpacing: 0.5,
-        ),
-      ),
-      const Spacer(),
-      IconButton(
-        icon: const Icon(Icons.settings, color: Colors.white, size: 26),
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
-          );
-        },
-      ),
-    ],
-  ),
-),
+            // 🔹 TOP APP BAR
+            Container(
+              width: double.infinity,
+              height: 72,
+              color: Colors.brown.shade800,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ProfileTab()),
+                      );
+                      _loadUserData();
+                    },
+                    borderRadius: BorderRadius.circular(50),
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Colors.white24,
+                      backgroundImage:
+                          _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                      child: _photoUrl == null
+                          ? const Icon(Icons.person, color: Colors.white, size: 26)
+                          : null,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    "ProcrastiMate",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 20,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.settings, color: Colors.white, size: 26),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
 
             // 🎁 Reward Shop button
             Padding(
@@ -171,37 +182,37 @@ Container(
               ),
             ),
 
-            // 🧮 Points Display
+            // 🧮 Points Display + Animated Wave
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 14),
               child: Column(
                 children: [
                   SizedBox(
-                    height: 100,
-                    child: Image.asset(
-                      'assets/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    height: 150,
+                    width: 150,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween<double>(
+                        begin: 0,
+                        end: (score % 100) / 100, // fill ratio
+                      ),
+                      duration: const Duration(seconds: 1),
+                      builder: (context, value, _) {
+                        return AnimatedWaterFill(progress: value);
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Your Points',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '$score',
+                    'Points: $score',
                     style: const TextStyle(
-                      fontSize: 48,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.green,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 6),
                   const Text(
-                    'Complete tasks to earn points!',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    'Fills up every 100 points!',
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
@@ -294,5 +305,117 @@ Container(
         elevation: 8,
       ),
     );
+  }
+}
+
+// 🌊 Animated Water Fill Widget
+class AnimatedWaterFill extends StatefulWidget {
+  final double progress; // 0–1
+  const AnimatedWaterFill({super.key, required this.progress});
+
+  @override
+  State<AnimatedWaterFill> createState() => _AnimatedWaterFillState();
+}
+
+class _AnimatedWaterFillState extends State<AnimatedWaterFill>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return CustomPaint(
+          painter: WavePainter(
+            progress: widget.progress,
+            wavePhase: _controller.value * 2 * math.pi,
+          ),
+        );
+      },
+    );
+  }
+}
+
+// 🎨 Gradient + Animated Wave Painter
+class WavePainter extends CustomPainter {
+  final double progress;
+  final double wavePhase;
+
+  WavePainter({
+    required this.progress,
+    required this.wavePhase,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Gradient fill (blue → teal)
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Colors.lightBlueAccent.withOpacity(0.9),
+        Colors.tealAccent.shade700.withOpacity(0.8),
+      ],
+    );
+
+    final paint = Paint()
+      ..shader = gradient.createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = Colors.brown.shade800
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final clipPath = Path()..addOval(rect);
+    canvas.clipPath(clipPath);
+
+    // Base water level
+    final baseHeight = size.height * (1 - progress);
+
+    // Create a smooth wave path
+    final path = Path();
+    const waveAmplitude = 6.0;
+    const waveFrequency = 2.0;
+
+    path.moveTo(0, baseHeight);
+    for (double x = 0; x <= size.width; x++) {
+      final y = baseHeight +
+          math.sin((x / size.width * waveFrequency * 2 * math.pi) + wavePhase) *
+              waveAmplitude;
+      path.lineTo(x, y);
+    }
+
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    // Fill with gradient
+    canvas.drawPath(path, paint);
+    // Draw outer circle border
+    canvas.drawOval(rect, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant WavePainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.wavePhase != wavePhase;
   }
 }
