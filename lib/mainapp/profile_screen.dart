@@ -4,10 +4,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:procastimate_app/models/task_data.dart';
-import 'package:procastimate_app/mainapp/calendar_screen.dart';
 import 'package:procastimate_app/mainapp/score_screen.dart';
+import 'package:procastimate_app/mainapp/calendar_screen.dart';
+
 import 'package:procastimate_app/mainapp/main_screen.dart';
+import 'dart:convert';
+import 'package:intl/intl.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -22,6 +24,8 @@ class _ProfileTabState extends State<ProfileTab> {
   final ImagePicker _picker = ImagePicker();
   String _userName = "Your Name";
   String _photoUrl = "";
+  int score = 0;
+  List<Map<String, dynamic>> completedTasks = [];
 
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
@@ -30,6 +34,8 @@ class _ProfileTabState extends State<ProfileTab> {
   void initState() {
     super.initState();
     _loadProfile();
+    _loadScore();
+    _loadCompletedTasks();
   }
 
   Future<void> _loadProfile() async {
@@ -40,9 +46,7 @@ class _ProfileTabState extends State<ProfileTab> {
     }
 
     try {
-      // Try loading from Firestore
       final doc = await _firestore.collection('users').doc(user.uid).get();
-      
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
@@ -51,8 +55,6 @@ class _ProfileTabState extends State<ProfileTab> {
         });
         return;
       }
-
-      // If no Firestore data, create initial profile
       await _firestore.collection('users').doc(user.uid).set({
         'uid': user.uid,
         'email': user.email,
@@ -60,19 +62,14 @@ class _ProfileTabState extends State<ProfileTab> {
         'photoUrl': "",
         'createdAt': FieldValue.serverTimestamp(),
       });
-      
       setState(() {
         _userName = user.displayName ?? "Your Name";
       });
-
     } catch (e) {
       debugPrint("⚠️ Firestore load failed: $e");
-      
-      // Fallback to local storage
       final prefs = await SharedPreferences.getInstance();
       final savedName = prefs.getString('username');
       final savedImagePath = prefs.getString('profileImagePath');
-      
       setState(() {
         if (savedName != null) _userName = savedName;
         if (savedImagePath != null) _profileImage = File(savedImagePath);
@@ -80,7 +77,28 @@ class _ProfileTabState extends State<ProfileTab> {
     }
   }
 
-  Future<void> _updateUserProfile({String? newName, File? newImage, String? imageUrl}) async {
+  Future<void> _loadScore() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      score = prefs.getInt('score') ?? 0;
+    });
+  }
+
+  Future<void> _loadCompletedTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final completedTasksRaw = prefs.getStringList('completedTasks') ?? [];
+    setState(() {
+      completedTasks = completedTasksRaw
+          .map((e) => jsonDecode(e) as Map<String, dynamic>)
+          .toList();
+    });
+  }
+
+  Future<void> _updateUserProfile({
+    String? newName,
+    File? newImage,
+    String? imageUrl,
+  }) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
@@ -88,29 +106,22 @@ class _ProfileTabState extends State<ProfileTab> {
       if (newName != null && newName.isNotEmpty) {
         await user.updateDisplayName(newName);
       }
-
-      // Handle local image
       if (newImage != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('profileImagePath', newImage.path);
       }
-
-      // Update Firestore
       await _firestore.collection('users').doc(user.uid).set({
         'uid': user.uid,
         'email': user.email,
         'username': newName ?? _userName,
-        'photoUrl': imageUrl ?? "", // Store URL if provided
+        'photoUrl': imageUrl ?? "",
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-
-      // Update local state
       setState(() {
         if (newName != null) _userName = newName;
         if (imageUrl != null) _photoUrl = imageUrl;
         if (newImage != null) _profileImage = newImage;
       });
-
     } catch (e) {
       debugPrint('⚠️ Profile update failed: $e');
     }
@@ -124,9 +135,7 @@ class _ProfileTabState extends State<ProfileTab> {
         title: const Text('Add Image URL'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter image URL',
-          ),
+          decoration: const InputDecoration(hintText: 'Enter image URL'),
         ),
         actions: [
           TextButton(
@@ -159,7 +168,9 @@ class _ProfileTabState extends State<ProfileTab> {
               icon: const Icon(Icons.photo_library, size: 35),
               onPressed: () async {
                 Navigator.pop(context);
-                final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+                final XFile? image = await _picker.pickImage(
+                  source: ImageSource.gallery,
+                );
                 if (image != null) {
                   await _updateUserProfile(newImage: File(image.path));
                 }
@@ -169,7 +180,9 @@ class _ProfileTabState extends State<ProfileTab> {
               icon: const Icon(Icons.camera_alt, size: 35),
               onPressed: () async {
                 Navigator.pop(context);
-                final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+                final XFile? image = await _picker.pickImage(
+                  source: ImageSource.camera,
+                );
                 if (image != null) {
                   await _updateUserProfile(newImage: File(image.path));
                 }
@@ -188,59 +201,58 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-// Add this method inside the _ProfileTabState class
-void _showEditProfileDialog() {
-  final controller = TextEditingController(text: _userName);
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Edit Profile'),
-      content: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          labelText: 'Name',
-          hintText: 'Enter your name',
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (controller.text.isNotEmpty) {
-              _updateUserProfile(newName: controller.text);
-            }
-            Navigator.pop(context);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.brown.shade800,
+  void _showEditProfileDialog() {
+    final controller = TextEditingController(text: _userName);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            hintText: 'Enter your name',
           ),
-          child: const Text('Save', style: TextStyle(color: Colors.white)),
         ),
-      ],
-    ),
-  );
-}
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                _updateUserProfile(newName: controller.text);
+              }
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.brown.shade800,
+            ),
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final allTasks = tasksByDate.values.expand((t) => t).toList();
-    final completedCount = allTasks.where((t) => t.completed).length;
-
     final imageProvider = _profileImage != null
         ? FileImage(_profileImage!)
         : (_photoUrl.isNotEmpty
-            ? NetworkImage(_photoUrl)
-            : const AssetImage('assets/profile_placeholder.png')
-                as ImageProvider);
+              ? NetworkImage(_photoUrl)
+              : const AssetImage('assets/profile_placeholder.png')
+                    as ImageProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
       appBar: AppBar(
         backgroundColor: Colors.brown.shade800,
-        title: const Text('Profile',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Profile',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -261,8 +273,11 @@ void _showEditProfileDialog() {
                       backgroundColor: Colors.black12,
                       backgroundImage: imageProvider,
                       child: (_photoUrl.isEmpty && _profileImage == null)
-                          ? const Icon(Icons.person,
-                              size: 60, color: Colors.black54)
+                          ? const Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Colors.black54,
+                            )
                           : null,
                     ),
                   ),
@@ -271,26 +286,40 @@ void _showEditProfileDialog() {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_userName,
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
-                      children: const [
-                        Icon(Icons.stars_sharp,
-                            color: Colors.orange, size: 40),
-                        SizedBox(width: 6),
-                        Text('0',
-                            style: TextStyle(
-                                fontSize: 22, fontWeight: FontWeight.bold)),
+                      children: [
+                        const Icon(
+                          Icons.stars_sharp,
+                          color: Colors.orange,
+                          size: 40,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$score',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text('Points obtained!',
-                        style: TextStyle(color: Colors.black, fontSize: 22)),
-                    Text('$completedCount Tasks completed',
-                        style:
-                            const TextStyle(color: Colors.black, fontSize: 15)),
+                    const Text(
+                      'Points obtained!',
+                      style: TextStyle(color: Colors.black, fontSize: 22),
+                    ),
+                    Text(
+                      '${completedTasks.length} Tasks completed',
+                      style: const TextStyle(color: Colors.black, fontSize: 15),
+                    ),
                   ],
                 ),
               ],
@@ -302,15 +331,18 @@ void _showEditProfileDialog() {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.brown.shade800,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               icon: const Icon(Icons.edit, color: Colors.white),
-              label: const Text('Edit Profile',
-                  style: TextStyle(color: Colors.white)),
+              label: const Text(
+                'Edit Profile',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
 
             const SizedBox(height: 30),
-            // Task View Section
+            // Completed Tasks Section
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -321,20 +353,23 @@ void _showEditProfileDialog() {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Task View',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Completed Tasks',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 12),
-                  if (allTasks.isEmpty)
+                  if (completedTasks.isEmpty)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.all(16.0),
-                        child: Text('No tasks available.',
-                            style: TextStyle(color: Colors.black54)),
+                        child: Text(
+                          'No completed tasks yet.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
                       ),
                     )
                   else
-                    for (final task in allTasks.take(3))
+                    for (final task in completedTasks.reversed.take(5))
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
@@ -343,39 +378,45 @@ void _showEditProfileDialog() {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: const [
                             BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 3,
-                                offset: Offset(0, 2))
+                              color: Colors.black12,
+                              blurRadius: 3,
+                              offset: Offset(0, 2),
+                            ),
                           ],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: task.completed,
-                                  onChanged: (_) {},
-                                  activeColor: Colors.brown.shade800,
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    task.title,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      decoration: task.completed
-                                          ? TextDecoration.lineThrough
-                                          : TextDecoration.none,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              task['title'] ?? '',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
-                            if (task.description != null &&
-                                task.description!.isNotEmpty)
-                              Text(task.description!,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.black54)),
+                            if (task['description'] != null &&
+                                (task['description'] as String).isNotEmpty)
+                              Text(
+                                task['description'],
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                task['completedAt'] != null
+                                    ? DateFormat('MM/dd/yyyy HH:mm').format(
+                                        DateTime.parse(task['completedAt']),
+                                      )
+                                    : '',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -392,18 +433,23 @@ void _showEditProfileDialog() {
           setState(() => _selectedIndex = i);
           if (i == 0) {
             Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const CalendarScreen()));
+              MaterialPageRoute(builder: (_) => const CalendarScreen()),
+            );
           } else if (i == 1) {
             Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const MainScreen()));
+              MaterialPageRoute(builder: (_) => const MainScreen()),
+            );
           } else if (i == 2) {
             Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const ScoreScreen()));
+              MaterialPageRoute(builder: (_) => const ScoreScreen()),
+            );
           }
         },
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today), label: 'Calendar'),
+            icon: Icon(Icons.calendar_today),
+            label: 'Calendar',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
         ],

@@ -224,13 +224,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       if (task.dueDate != null)
-                                        Text(
-                                          "Due: ${DateFormat('MM/dd HH:mm').format(task.dueDate!)}",
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.black54,
-                                          ),
+                                      Text(
+                                        "Due: ${DateFormat('MM/dd h:mm a').format(task.dueDate!)}",
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54,
                                         ),
+                                      ),
+
                                     ],
                                   ),
                                 ),

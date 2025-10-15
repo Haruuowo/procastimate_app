@@ -31,21 +31,19 @@ class _MainScreenState extends State<MainScreen> {
     _initUserAndTasks();
   }
 
-  Future<void> _initUserAndTasks() async {
-    await _loadUserName();
-    await loadTasks();
-    setState(() => _loading = false);
+    @override
+    State<MainScreen> createState() => _MainScreenState();
   }
 
   Future<void> _loadUserName() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+    @override
+    void initState() {
+      super.initState();
+      _initUserAndTasks();
+    }
 
       if (doc.exists) {
         final data = doc.data();
@@ -63,17 +61,11 @@ class _MainScreenState extends State<MainScreen> {
               user.displayName ?? user.email?.split('@').first ?? 'User';
         });
       }
-    } catch (e) {
-      debugPrint('Error loading username: $e');
-      setState(() {
-        _username = user.displayName ?? user.email?.split('@').first ?? 'User';
-      });
     }
-  }
 
-  Future<void> saveTasks() async {
-    final user = AuthService.instance.currentUser;
-    if (user == null) return;
+    Future<void> saveTasks() async {
+      final user = AuthService.instance.currentUser;
+      if (user == null) return;
 
     final userDoc =
         FirebaseFirestore.instance.collection('users').doc(user.uid);
@@ -87,33 +79,64 @@ class _MainScreenState extends State<MainScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to save tasks: $e')),
       );
-    }
-  }
 
-  Future<void> loadTasks() async {
-    final user = AuthService.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (doc.exists && doc.data()?['tasksByDate'] != null) {
-        final Map<String, dynamic> decoded =
-            Map<String, dynamic>.from(doc.data()!['tasksByDate']);
-        setState(() {
-          tasksByDate.clear();
-          decoded.forEach((key, list) {
-            tasksByDate[key] =
-                (list as List).map((t) => Task.fromJson(t)).toList();
-          });
-        });
+      try {
+        await userDoc.set({'tasksByDate': taskMap}, SetOptions(merge: true));
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save tasks: $e')));
       }
-    } catch (e) {
-      debugPrint('Error loading tasks: $e');
     }
-  }
+
+    Future<void> loadTasks() async {
+      final user = AuthService.instance.currentUser;
+      if (user == null) return;
+
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (doc.exists && doc.data()?['tasksByDate'] != null) {
+          final Map<String, dynamic> decoded = Map<String, dynamic>.from(
+            doc.data()!['tasksByDate'],
+          );
+          setState(() {
+            tasksByDate.clear();
+            decoded.forEach((key, list) {
+              tasksByDate[key] = (list as List)
+                  .map((t) => Task.fromJson(t))
+                  .toList();
+            });
+          });
+        }
+      } catch (e) {
+        debugPrint('Error loading tasks: $e');
+      }
+    }
+
+    Future<void> _loadScore() async {
+      final user = AuthService.instance.currentUser;
+      if (user == null) return;
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        int firestoreScore = 0;
+        if (doc.exists && doc.data()?['score'] != null) {
+          firestoreScore = doc.data()!['score'] ?? 0;
+        }
+        setState(() {
+          _score = firestoreScore;
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('score', firestoreScore);
+      } catch (e) {
+        debugPrint('Error loading score: $e');
+      }
+    }
 
   void _deleteTask(String dateKey, String taskId) {
     setState(() {
@@ -308,25 +331,25 @@ return Dialog(
 }
 
 
-  void _toggleTaskCompletion(String dateKey, String taskId) {
-    setState(() {
+    void _toggleTaskCompletion(String dateKey, String taskId) async {
       final tasks = tasksByDate[dateKey];
       if (tasks == null) return;
       final index = tasks.indexWhere((t) => t.id == taskId);
       if (index == -1) return;
       final task = tasks[index];
-      final updated = task.copyWith(
-        completed: !task.completed,
-        completedAt: !task.completed ? DateTime.now() : null,
-      );
-      tasks[index] = updated;
-      tasks.sort((a, b) {
-        if (a.completed == b.completed) return 0;
-        return a.completed ? 1 : -1;
+      final updated = task.copyWith(completed: true, completedAt: DateTime.now());
+
+      setState(() {
+        _score += 5;
+        tasks.removeAt(index);
+        if (tasks.isEmpty) {
+          tasksByDate.remove(dateKey);
+        }
       });
-    });
-    saveTasks();
-  }
+      await _saveScore(_score);
+      await _saveCompletedTask(updated);
+      saveTasks();
+    }
 
   String _formatDueDateShort(DateTime date) {
     return DateFormat('MMM d, yyyy • h:mm a').format(date);
@@ -463,11 +486,39 @@ return Dialog(
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
                   ),
-                  onPressed: _openCreateTaskDialog,
                 ),
               ),
+            ],
+          ),
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (i) {
+            setState(() => _selectedIndex = i);
+            if (i == 0) {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const CalendarScreen()));
+            } else if (i == 2) {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today),
+              label: 'Calendar',
             ),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
           ],
+          selectedItemColor: Colors.brown.shade800,
+          unselectedItemColor: Colors.grey.shade600,
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          backgroundColor: Colors.white,
+          elevation: 8,
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -655,7 +706,6 @@ class _HoverableTaskCardState extends State<_HoverableTaskCard> {
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
   }
-}
