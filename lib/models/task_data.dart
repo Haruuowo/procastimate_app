@@ -41,8 +41,9 @@ Future<void> loadTasksFromPrefs() async {
     tasksByDate.clear();
 
     decoded.forEach((key, value) {
-      final taskList =
-          (value as List).map((json) => Task.fromJson(json)).toList();
+      final taskList = (value as List)
+          .map((json) => Task.fromJson(json))
+          .toList();
       tasksByDate[key] = taskList;
     });
   } catch (e) {
