@@ -1,5 +1,4 @@
-// ignore_for_file: unused_field
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
@@ -27,10 +26,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
   String? _photoUrl;
   bool _loadingUser = true;
 
+  // streak count (display only)
+  int _streakCount = 0;
+  bool _streakActive = false;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _streakSub;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _subscribeStreak();
+  }
+
+  @override
+  void dispose() {
+    _streakSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -50,6 +61,40 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
+  void _subscribeStreak() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    _streakSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen(
+          (snap) {
+            final data = snap.data();
+            if (data == null) return;
+            final dynamic remote = data['streakCount'];
+            int remoteCount = 0;
+            if (remote is int) {
+              remoteCount = remote;
+            } else if (remote is double) {
+              remoteCount = remote.toInt();
+            } else if (remote is String) {
+              remoteCount = int.tryParse(remote) ?? 0;
+            }
+            if (mounted && remoteCount != _streakCount) {
+              setState(() {
+                _streakCount = remoteCount;
+                _streakActive = _streakCount > 0;
+              });
+            }
+          },
+          onError: (_) {
+            // ignore
+          },
+        );
+  }
+
   List<Task> _getTasksForDay(DateTime day) {
     final key = DateFormat('yyyy-MM-dd').format(day);
     return (tasksByDate[key] ?? []).where((t) => !t.completed).toList();
@@ -58,78 +103,131 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _onItemTapped(int i) {
     setState(() => _selectedIndex = i);
     if (i == 1) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const MainScreen()));
     } else if (i == 2) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ScoreScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ScoreScreen()));
     }
+  }
+
+  Widget _buildAvatarWithStreak() {
+    const double avatarRadius = 18.0;
+    final double avatarDiameter = avatarRadius * 2;
+    final streakAsset = _streakActive
+        ? 'assets/Streaks_On.png'
+        : 'assets/Streaks_Off.png';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () async {
+            await Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProfileTab()));
+            _loadUserData();
+          },
+          borderRadius: BorderRadius.circular(50),
+          child: CircleAvatar(
+            radius: avatarRadius,
+            backgroundColor: Colors.white24,
+            backgroundImage: _photoUrl != null
+                ? NetworkImage(_photoUrl!)
+                : null,
+            child: _photoUrl == null
+                ? const Icon(Icons.person, color: Colors.white)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: avatarDiameter,
+          height: avatarDiameter,
+          child: ClipOval(
+            child: Image.asset(
+              streakAsset,
+              width: avatarDiameter,
+              height: avatarDiameter,
+              fit: BoxFit.cover,
+              errorBuilder: (ctx, err, stack) {
+                return Container(
+                  width: avatarDiameter,
+                  height: avatarDiameter,
+                  color: Colors.white24,
+                  child: const Icon(
+                    Icons.local_fire_department,
+                    color: Colors.orange,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$_streakCount',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedTasks =
-        _selectedDay != null ? _getTasksForDay(_selectedDay!) : [];
+    final selectedTasks = _selectedDay != null
+        ? _getTasksForDay(_selectedDay!)
+        : [];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 TOP APP BAR (Same as MainScreen)
+            // 🔹 TOP APP BAR (matched to main_screen style)
             Container(
               width: double.infinity,
               height: 72,
               color: Colors.brown.shade800,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    InkWell(
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ProfileTab(),
-                          ),
-                        );
-                        _loadUserData(); // Refresh after returning
-                      },
-                      child: CircleAvatar(
-                        backgroundColor: Colors.white24,
-                        backgroundImage:
-                            _photoUrl != null ? NetworkImage(_photoUrl!) : null,
-                        radius: 18,
-                        child: _photoUrl == null
-                            ? const Icon(Icons.person, color: Colors.white)
-                            : null,
-                      ),
-                    ),
-                    const Spacer(),
-                    const Text(
-                      "Procastimate",
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildAvatarWithStreak(),
+                  ),
+                  const Center(
+                    child: Text(
+                      "ProcrastiMate",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
-                        letterSpacing: 0.5,
                       ),
                     ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.settings,
-                          color: Colors.white, size: 26),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SettingsScreen(),
-                          ),
-                        );
-                      },
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.settings,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
@@ -226,14 +324,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       if (task.dueDate != null)
-                                      Text(
-                                        "Due: ${DateFormat('MM/dd h:mm a').format(task.dueDate!)}",
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.black54,
+                                        Text(
+                                          "Due: ${DateFormat('MMM d h:mm a').format(task.dueDate!)}",
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black54,
+                                          ),
                                         ),
-                                      ),
-
                                     ],
                                   ),
                                 ),
