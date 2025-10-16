@@ -88,11 +88,17 @@ class _MainScreenState extends State<MainScreen> {
       (key, tasks) => MapEntry(key, tasks.map((t) => t.toJson()).toList()),
     );
     try {
-      await userDoc.set({'tasksByDate': taskMap}, SetOptions(merge: true));
+      // Use update for the tasksByDate field so it replaces that field cleanly.
+      await userDoc.update({'tasksByDate': taskMap});
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save tasks: $e')));
+      // If update fails (e.g. document missing) fall back to set with merge
+      try {
+        await userDoc.set({'tasksByDate': taskMap}, SetOptions(merge: true));
+      } catch (err) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save tasks: $err')));
+      }
     }
   }
 
@@ -178,9 +184,12 @@ class _MainScreenState extends State<MainScreen> {
           },
         ]),
       });
+
+      // Save locally — insert at 0 so most recent is on top
       final prefs = await SharedPreferences.getInstance();
       final completedTasksRaw = prefs.getStringList('completedTasks') ?? [];
-      completedTasksRaw.add(
+      completedTasksRaw.insert(
+        0,
         jsonEncode({
           'id': task.id,
           'title': task.title,
@@ -551,6 +560,8 @@ class _MainScreenState extends State<MainScreen> {
     if (index == -1) return;
     final task = tasks[index];
     final updated = task.copyWith(completed: true, completedAt: DateTime.now());
+
+    // Update local state immediately so card vanishes.
     setState(() {
       _score += 5;
       tasks.removeAt(index);
@@ -558,6 +569,8 @@ class _MainScreenState extends State<MainScreen> {
         tasksByDate.remove(dateKey);
       }
     });
+
+    // Persist score and completed task, then persist updated tasksByDate to Firestore.
     await _saveScore(_score);
     await _saveCompletedTask(updated);
     await saveTasks();
@@ -677,7 +690,7 @@ class _MainScreenState extends State<MainScreen> {
                     // centered title
                     const Center(
                       child: Text(
-                        "Procastimate",
+                        "ProcrastiMate",
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,

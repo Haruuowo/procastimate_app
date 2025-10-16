@@ -195,6 +195,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
       appBar: AppBar(
         backgroundColor: Colors.brown.shade800,
         elevation: 0,
+        centerTitle: true,
         title: const Text(
           'Reward Shop',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
