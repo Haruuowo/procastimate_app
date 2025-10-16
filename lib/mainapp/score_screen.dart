@@ -427,6 +427,8 @@ class _ScoreScreenState extends State<ScoreScreen> {
                     ? const Center(child: Text('No completed tasks yet.'))
                     : SingleChildScrollView(
                         scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
                         child: DataTable(
                           columnSpacing: 24,
                           columns: const [
@@ -480,6 +482,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
                               .toList(),
                         ),
                       ),
+                    ),
               ),
             ),
           ],

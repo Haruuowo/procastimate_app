@@ -286,6 +286,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                 ),
                 const SizedBox(width: 20),
+                Flexible(child: 
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -324,7 +325,9 @@ class _ProfileTabState extends State<ProfileTab> {
                       style: const TextStyle(color: Colors.black, fontSize: 15),
                     ),
                   ],
-                ),
+                )
+                )
+                ,
               ],
             ),
 

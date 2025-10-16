@@ -19,6 +19,9 @@ Future<void> main() async {
     debugPrint('❌ Firebase initialization failed: $e\n$st');
   }
 
+  FlutterError.onError = (details) {}; 
+  ErrorWidget.builder = (FlutterErrorDetails details) => const SizedBox.shrink();
+  
   runApp(const MyApp());
 }
 
