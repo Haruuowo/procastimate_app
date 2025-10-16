@@ -80,7 +80,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
   String _displayTitle(String title) {
     const int maxChars = 12;
     if (title.length <= maxChars) return title;
-    return title.substring(0, maxChars) + '…';
+    return '${title.substring(0, maxChars)}…';
   }
 
   // Listen to Firestore user document so ScoreScreen updates in real-time

@@ -233,9 +233,9 @@ class _MainScreenState extends State<MainScreen> {
           if (data != null) {
             if (data['streakCount'] != null) {
               final rc = data['streakCount'];
-              if (rc is int)
+              if (rc is int) {
                 localCount = rc;
-              else if (rc is String)
+              } else if (rc is String)
                 localCount = int.tryParse(rc) ?? localCount;
             }
             if (data['lastStreakDate'] != null) {
@@ -289,10 +289,11 @@ class _MainScreenState extends State<MainScreen> {
       final user = AuthService.instance.currentUser;
       if (user != null) {
         final Map<String, dynamic> payload = {'streakCount': count};
-        if (lastDate != null)
+        if (lastDate != null) {
           payload['lastStreakDate'] = lastDate;
-        else
+        } else {
           payload['lastStreakDate'] = null;
+        }
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
