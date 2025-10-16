@@ -1,5 +1,4 @@
-// ignore_for_file: unused_field
-
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,20 +27,31 @@ class _ScoreScreenState extends State<ScoreScreen> {
   String? _photoUrl;
   bool _loadingUser = true;
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
+
   @override
   void initState() {
     super.initState();
     _loadScore();
     _loadCompletedTasks();
     _loadUserData();
+    _subscribeScoreUpdates();
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final doc =
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
     if (mounted) {
       setState(() {
@@ -53,17 +63,58 @@ class _ScoreScreenState extends State<ScoreScreen> {
 
   Future<void> _loadScore() async {
     final prefs = await SharedPreferences.getInstance();
-    int savedScore = prefs.getInt('score') ?? 0;
+    final savedScore = prefs.getInt('score') ?? 0;
 
-    // Reset after 100 points (water overflows)
-    if (savedScore >= 100) {
-      savedScore = 0;
-      prefs.setInt('score', 0);
+    // Keep cumulative score (do not reset at 100)
+    if (mounted) {
+      setState(() {
+        score = savedScore;
+      });
     }
+  }
 
-    setState(() {
-      score = savedScore;
-    });
+  // Listen to Firestore user document so ScoreScreen updates in real-time
+  // when other parts of the app (MainScreen / RewardShop) update the score.
+  void _subscribeScoreUpdates() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    _userSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen(
+          (snap) async {
+            if (!mounted) return;
+            final data = snap.data();
+            if (data == null) return;
+            final dynamic remote = data['score'];
+            if (remote == null) return;
+
+            final int remoteScore;
+            if (remote is int) {
+              remoteScore = remote;
+            } else if (remote is double) {
+              remoteScore = remote.toInt();
+            } else if (remote is String) {
+              remoteScore = int.tryParse(remote) ?? score;
+            } else {
+              remoteScore = score;
+            }
+
+            if (remoteScore != score) {
+              setState(() {
+                score = remoteScore;
+              });
+              // keep local prefs in sync
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setInt('score', remoteScore);
+            }
+          },
+          onError: (e) {
+            // ignore errors - Firestore listener may throw on permission issues etc.
+          },
+        );
   }
 
   Future<void> _loadCompletedTasks() async {
@@ -83,14 +134,20 @@ class _ScoreScreenState extends State<ScoreScreen> {
         MaterialPageRoute(builder: (_) => const CalendarScreen()),
       );
     } else if (i == 1) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const MainScreen()));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // fill ratio between 0 and 1 based on the current score (keeps cumulative score)
+    final double fillRatio = ((score % 100) / 100).clamp(
+      0.0,
+      1.0,
+    ); // safe clamp
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
       body: SafeArea(
@@ -115,10 +172,15 @@ class _ScoreScreenState extends State<ScoreScreen> {
                     child: CircleAvatar(
                       radius: 22,
                       backgroundColor: Colors.white24,
-                      backgroundImage:
-                          _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                      backgroundImage: _photoUrl != null
+                          ? NetworkImage(_photoUrl!)
+                          : null,
                       child: _photoUrl == null
-                          ? const Icon(Icons.person, color: Colors.white, size: 26)
+                          ? const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 26,
+                            )
                           : null,
                     ),
                   ),
@@ -134,10 +196,16 @@ class _ScoreScreenState extends State<ScoreScreen> {
                   ),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.settings, color: Colors.white, size: 26),
+                    icon: const Icon(
+                      Icons.settings,
+                      color: Colors.white,
+                      size: 26,
+                    ),
                     onPressed: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsScreen(),
+                        ),
                       );
                     },
                   ),
@@ -166,7 +234,8 @@ class _ScoreScreenState extends State<ScoreScreen> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                            builder: (_) => const RewardShopScreen()),
+                          builder: (_) => const RewardShopScreen(),
+                        ),
                       );
                     },
                     child: const Text(
@@ -191,10 +260,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
                     height: 150,
                     width: 150,
                     child: TweenAnimationBuilder<double>(
-                      tween: Tween<double>(
-                        begin: 0,
-                        end: (score % 100) / 100, // fill ratio
-                      ),
+                      tween: Tween<double>(begin: 0, end: fillRatio),
                       duration: const Duration(seconds: 1),
                       builder: (context, value, _) {
                         return AnimatedWaterFill(progress: value);
@@ -221,8 +287,10 @@ class _ScoreScreenState extends State<ScoreScreen> {
             // 📋 Completed Tasks Table
             Expanded(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8,
+                ),
                 child: completedTasks.isEmpty
                     ? const Center(child: Text('No completed tasks yet.'))
                     : SingleChildScrollView(
@@ -255,10 +323,12 @@ class _ScoreScreenState extends State<ScoreScreen> {
                                         width: 120,
                                         child: Text(
                                           task['completedAt'] != null
-                                              ? DateFormat('MM/dd/yyyy HH:mm')
-                                                  .format(
+                                              ? DateFormat(
+                                                  'MM/dd/yyyy HH:mm',
+                                                ).format(
                                                   DateTime.parse(
-                                                      task['completedAt']),
+                                                    task['completedAt'],
+                                                  ),
                                                 )
                                               : '',
                                           maxLines: 1,
@@ -288,14 +358,8 @@ class _ScoreScreenState extends State<ScoreScreen> {
             icon: Icon(Icons.calendar_today),
             label: 'Calendar',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: 'Score',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Score'),
         ],
         selectedItemColor: Colors.brown.shade800,
         unselectedItemColor: Colors.grey.shade600,
@@ -357,10 +421,7 @@ class WavePainter extends CustomPainter {
   final double progress;
   final double wavePhase;
 
-  WavePainter({
-    required this.progress,
-    required this.wavePhase,
-  });
+  WavePainter({required this.progress, required this.wavePhase});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -375,7 +436,9 @@ class WavePainter extends CustomPainter {
     );
 
     final paint = Paint()
-      ..shader = gradient.createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..shader = gradient.createShader(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+      )
       ..style = PaintingStyle.fill;
 
     final borderPaint = Paint()
@@ -397,7 +460,8 @@ class WavePainter extends CustomPainter {
 
     path.moveTo(0, baseHeight);
     for (double x = 0; x <= size.width; x++) {
-      final y = baseHeight +
+      final y =
+          baseHeight +
           math.sin((x / size.width * waveFrequency * 2 * math.pi) + wavePhase) *
               waveAmplitude;
       path.lineTo(x, y);

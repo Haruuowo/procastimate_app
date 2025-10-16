@@ -27,9 +27,10 @@ class _MainScreenState extends State<MainScreen> {
   bool _loading = true;
   int _score = 0;
 
-  // Assuming tasksByDate is defined in task_data.dart and is accessible here.
-  // For completeness, I'll mock its usage based on context:
-  // final Map<String, List<Task>> tasksByDate = TaskData.tasksByDate;
+  // Streak state
+  int _streakCount = 0;
+  String? _lastStreakDate; // stored as 'yyyy-MM-dd'
+  bool _streakActive = false;
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _MainScreenState extends State<MainScreen> {
     await _loadUserName();
     await loadTasks();
     await _loadScore();
+    await _loadStreak(); // load streak state
     setState(() => _loading = false);
   }
 
@@ -55,7 +57,8 @@ class _MainScreenState extends State<MainScreen> {
       if (doc.exists) {
         final data = doc.data();
         setState(() {
-          _username = data?['username'] ??
+          _username =
+              data?['username'] ??
               user.displayName ??
               user.email?.split('@').first ??
               'User';
@@ -63,7 +66,8 @@ class _MainScreenState extends State<MainScreen> {
         });
       } else {
         setState(() {
-          _username = user.displayName ?? user.email?.split('@').first ?? 'User';
+          _username =
+              user.displayName ?? user.email?.split('@').first ?? 'User';
         });
       }
     } catch (e) {
@@ -77,7 +81,9 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> saveTasks() async {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final userDoc = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid);
     final Map<String, dynamic> taskMap = tasksByDate.map(
       (key, tasks) => MapEntry(key, tasks.map((t) => t.toJson()).toList()),
     );
@@ -94,15 +100,20 @@ class _MainScreenState extends State<MainScreen> {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
     try {
-      final doc =
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (doc.exists && doc.data()?['tasksByDate'] != null) {
-        final Map<String, dynamic> decoded =
-            Map<String, dynamic>.from(doc.data()!['tasksByDate']);
+        final Map<String, dynamic> decoded = Map<String, dynamic>.from(
+          doc.data()!['tasksByDate'],
+        );
         setState(() {
           tasksByDate.clear();
           decoded.forEach((key, list) {
-            tasksByDate[key] = (list as List).map((t) => Task.fromJson(t)).toList();
+            tasksByDate[key] = (list as List)
+                .map((t) => Task.fromJson(t))
+                .toList();
           });
         });
       }
@@ -115,8 +126,10 @@ class _MainScreenState extends State<MainScreen> {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
     try {
-      final doc =
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       int firestoreScore = 0;
       if (doc.exists && doc.data()?['score'] != null) {
         firestoreScore = doc.data()!['score'] ?? 0;
@@ -135,12 +148,9 @@ class _MainScreenState extends State<MainScreen> {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-        {
-          'score': score,
-        },
-        SetOptions(merge: true),
-      );
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'score': score,
+      }, SetOptions(merge: true));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('score', score);
     } catch (e) {
@@ -152,7 +162,9 @@ class _MainScreenState extends State<MainScreen> {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
     try {
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final userDoc = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
       await userDoc.update({
         'completedTasks': FieldValue.arrayUnion([
           {
@@ -185,6 +197,131 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  // --- STREAK LOGIC ---
+  // Streak rules:
+  // - stored lastStreakDate as 'yyyy-MM-dd' local date
+  // - if user completes >=1 task in a 24h window (ends at midnight local), streak continues
+  // - if no completion within 24 hours (i.e. lastStreakDate older than yesterday), streak resets
+  Future<void> _loadStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedCount = prefs.getInt('streakCount');
+    final savedDate = prefs.getString('lastStreakDate');
+
+    // start with local prefs
+    int localCount = savedCount ?? 0;
+    String? localDate = savedDate;
+
+    // try to get remote and prefer remote if present
+    try {
+      final user = AuthService.instance.currentUser;
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (doc.exists) {
+          final data = doc.data();
+          if (data != null) {
+            if (data['streakCount'] != null) {
+              final rc = data['streakCount'];
+              if (rc is int)
+                localCount = rc;
+              else if (rc is String)
+                localCount = int.tryParse(rc) ?? localCount;
+            }
+            if (data['lastStreakDate'] != null) {
+              localDate = data['lastStreakDate'];
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading streak from firestore: $e');
+    }
+
+    // compute if streak still valid
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now().toLocal());
+    final yesterday = DateFormat(
+      'yyyy-MM-dd',
+    ).format(DateTime.now().toLocal().subtract(const Duration(days: 1)));
+
+    if (localDate == today || localDate == yesterday) {
+      // still active
+      setState(() {
+        _streakCount = localCount;
+        _lastStreakDate = localDate;
+        _streakActive = localCount > 0;
+      });
+    } else {
+      // expired / reset
+      setState(() {
+        _streakCount = 0;
+        _lastStreakDate = null;
+        _streakActive = false;
+      });
+      // persist reset to both local prefs and firestore
+      await _saveStreakToPrefsAndFirestore(0, null);
+    }
+  }
+
+  Future<void> _saveStreakToPrefsAndFirestore(
+    int count,
+    String? lastDate,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('streakCount', count);
+      if (lastDate != null) {
+        await prefs.setString('lastStreakDate', lastDate);
+      } else {
+        await prefs.remove('lastStreakDate');
+      }
+
+      final user = AuthService.instance.currentUser;
+      if (user != null) {
+        final Map<String, dynamic> payload = {'streakCount': count};
+        if (lastDate != null)
+          payload['lastStreakDate'] = lastDate;
+        else
+          payload['lastStreakDate'] = null;
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .set(payload, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint('Error saving streak: $e');
+    }
+  }
+
+  // Call when user completes a task
+  Future<void> _updateStreakOnTaskCompletion() async {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now().toLocal());
+    final yesterday = DateFormat(
+      'yyyy-MM-dd',
+    ).format(DateTime.now().toLocal().subtract(const Duration(days: 1)));
+
+    if (_lastStreakDate == today) {
+      // already counted today: nothing to change
+      return;
+    } else if (_lastStreakDate == yesterday) {
+      // continue streak: increment
+      _streakCount = (_streakCount >= 0) ? _streakCount + 1 : 1;
+    } else {
+      // streak broken or first time: start at 1
+      _streakCount = 1;
+    }
+
+    _lastStreakDate = today;
+    _streakActive = true;
+
+    // persist
+    await _saveStreakToPrefsAndFirestore(_streakCount, _lastStreakDate);
+    setState(() {}); // refresh UI
+  }
+
+  // --- END STREAK LOGIC ---
+
   void _deleteTask(String dateKey, String taskId) {
     setState(() {
       final tasks = tasksByDate[dateKey];
@@ -196,12 +333,17 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _openTaskDialog({String? existingDate, Task? existingTask}) {
-    final titleController = TextEditingController(text: existingTask?.title ?? '');
-    final subjectController =
-        TextEditingController(text: existingTask?.subject ?? '');
-    final descController =
-        TextEditingController(text: existingTask?.description ?? '');
-    DateTime? dueDate = existingTask?.dueDate ??
+    final titleController = TextEditingController(
+      text: existingTask?.title ?? '',
+    );
+    final subjectController = TextEditingController(
+      text: existingTask?.subject ?? '',
+    );
+    final descController = TextEditingController(
+      text: existingTask?.description ?? '',
+    );
+    DateTime? dueDate =
+        existingTask?.dueDate ??
         (existingDate != null ? DateTime.tryParse(existingDate) : null);
 
     showDialog(
@@ -224,7 +366,8 @@ class _MainScreenState extends State<MainScreen> {
                     dueDate ?? DateTime.now().add(const Duration(hours: 1)),
                   ),
                 );
-                final finalTime = pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
+                final finalTime =
+                    pickedTime ?? const TimeOfDay(hour: 0, minute: 0);
 
                 setDialogState(() {
                   dueDate = DateTime(
@@ -239,7 +382,9 @@ class _MainScreenState extends State<MainScreen> {
             }
 
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.8,
@@ -266,7 +411,9 @@ class _MainScreenState extends State<MainScreen> {
                         const SizedBox(height: 8),
                         TextField(
                           controller: subjectController,
-                          decoration: const InputDecoration(labelText: "Subject"),
+                          decoration: const InputDecoration(
+                            labelText: "Subject",
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Container(
@@ -300,7 +447,8 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                             if (dueDate != null)
                               IconButton(
-                                onPressed: () => setDialogState(() => dueDate = null),
+                                onPressed: () =>
+                                    setDialogState(() => dueDate = null),
                                 icon: const Icon(Icons.clear),
                               ),
                           ],
@@ -315,13 +463,16 @@ class _MainScreenState extends State<MainScreen> {
                                   Navigator.pop(context);
                                   _deleteTask(
                                     existingDate ??
-                                        DateFormat('yyyy-MM-dd')
-                                            .format(existingTask.dueDate!),
+                                        DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(existingTask.dueDate!),
                                     existingTask.id,
                                   );
                                 },
-                                child: const Text("Delete",
-                                    style: TextStyle(color: Colors.red)),
+                                child: const Text(
+                                  "Delete",
+                                  style: TextStyle(color: Colors.red),
+                                ),
                               ),
                             TextButton(
                               onPressed: () => Navigator.pop(context),
@@ -336,9 +487,9 @@ class _MainScreenState extends State<MainScreen> {
                                 if (titleController.text.isNotEmpty &&
                                     subjectController.text.isNotEmpty) {
                                   final newTask = Task(
-                                    id: existingTask?.id ??
-                                        DateTime.now()
-                                            .millisecondsSinceEpoch
+                                    id:
+                                        existingTask?.id ??
+                                        DateTime.now().millisecondsSinceEpoch
                                             .toString(),
                                     title: titleController.text,
                                     subject: subjectController.text,
@@ -348,12 +499,14 @@ class _MainScreenState extends State<MainScreen> {
                                   );
                                   setState(() {
                                     if (existingTask != null) {
-                                      final dateKey = DateFormat('yyyy-MM-dd')
-                                          .format(dueDate ?? DateTime.now());
+                                      final dateKey = DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(dueDate ?? DateTime.now());
                                       final list = tasksByDate[dateKey];
                                       if (list != null) {
                                         final index = list.indexWhere(
-                                            (t) => t.id == existingTask.id);
+                                          (t) => t.id == existingTask.id,
+                                        );
                                         if (index != -1) list[index] = newTask;
                                       }
                                     } else {
@@ -383,12 +536,10 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Missing helper method 1: Open dialog for a specific date (from _DateColumn)
   void _openCreateTaskDialogForDate(String dateKey) {
     _openTaskDialog(existingDate: dateKey);
   }
 
-  // Missing helper method 2: Open dialog with no date preset (from CREATE TASK button)
   void _openCreateTaskDialog() {
     _openTaskDialog();
   }
@@ -409,7 +560,10 @@ class _MainScreenState extends State<MainScreen> {
     });
     await _saveScore(_score);
     await _saveCompletedTask(updated);
-    saveTasks();
+    await saveTasks();
+
+    // Update streak when a task is completed
+    await _updateStreakOnTaskCompletion();
   }
 
   void addTask(Task task) {
@@ -420,6 +574,77 @@ class _MainScreenState extends State<MainScreen> {
       tasksByDate[key] = [];
     }
     tasksByDate[key]!.add(task);
+  }
+
+  Widget _buildAvatarWithStreak() {
+    // choose asset according to streak state
+    final streakAsset = _streakActive
+        ? 'assets/Streaks_On.png'
+        : 'assets/Streaks_Off.png';
+
+    // Use same visual size as profile avatar but avoid expanding the app bar.
+    // Keep avatar radius matching other places (18 used elsewhere).
+    const double avatarRadius = 18.0;
+    final double avatarDiameter = avatarRadius * 2;
+
+    return Row(
+      children: [
+        InkWell(
+          onTap: () async {
+            await Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProfileTab()));
+            _loadUserName();
+            await _loadStreak();
+          },
+          child: CircleAvatar(
+            backgroundColor: Colors.white24,
+            backgroundImage: _photoUrl != null
+                ? NetworkImage(_photoUrl!)
+                : null,
+            radius: avatarRadius,
+            child: _photoUrl == null
+                ? const Icon(Icons.person, color: Colors.white)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        // streak badge (same size as avatar) - fixed box so it won't expand the app bar
+        SizedBox(
+          width: avatarDiameter,
+          height: avatarDiameter,
+          child: ClipOval(
+            child: Image.asset(
+              streakAsset,
+              width: avatarDiameter,
+              height: avatarDiameter,
+              fit: BoxFit.cover,
+              errorBuilder: (ctx, err, stack) {
+                return Container(
+                  width: avatarDiameter,
+                  height: avatarDiameter,
+                  color: Colors.white24,
+                  child: const Icon(
+                    Icons.local_fire_department,
+                    color: Colors.orange,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // only show the streak count (no label)
+        Text(
+          '$_streakCount',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -440,44 +665,39 @@ class _MainScreenState extends State<MainScreen> {
               color: Colors.brown.shade800,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
+                // use Stack so title stays perfectly centered visually
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    InkWell(
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const ProfileTab()),
-                        );
-                        _loadUserName();
-                      },
-                      child: CircleAvatar(
-                        backgroundColor: Colors.white24,
-                        backgroundImage:
-                            _photoUrl != null ? NetworkImage(_photoUrl!) : null,
-                        radius: 18,
-                        child: _photoUrl == null
-                            ? const Icon(Icons.person, color: Colors.white)
-                            : null,
+                    // left: avatar + streak
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _buildAvatarWithStreak(),
+                    ),
+                    // centered title
+                    const Center(
+                      child: Text(
+                        "Procastimate",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 20,
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    const Text(
-                      "Procastimate",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 20,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.settings,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const SettingsScreen(),
+                    // right: settings button
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.settings,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
                         ),
                       ),
                     ),
@@ -510,8 +730,11 @@ class _MainScreenState extends State<MainScreen> {
                         children: tasksByDate.entries.map((entry) {
                           final dateKey = entry.key;
                           final tasks = entry.value;
-                          final parsed = DateTime.tryParse(dateKey) ?? DateTime.now();
-                          final dateLabel = DateFormat("MMM d, yyyy").format(parsed);
+                          final parsed =
+                              DateTime.tryParse(dateKey) ?? DateTime.now();
+                          final dateLabel = DateFormat(
+                            "MMM d, yyyy",
+                          ).format(parsed);
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
@@ -519,10 +742,12 @@ class _MainScreenState extends State<MainScreen> {
                               dateLabel: dateLabel,
                               dateKey: dateKey,
                               tasks: tasks,
-                              onToggleTask: (id) => _toggleTaskCompletion(dateKey, id),
+                              onToggleTask: (id) =>
+                                  _toggleTaskCompletion(dateKey, id),
                               onDeleteTask: (id) => _deleteTask(dateKey, id),
                               onAddTask: (k) => _openCreateTaskDialogForDate(k),
-                              onEditTask: (task) => _openTaskDialog(existingTask: task),
+                              onEditTask: (task) =>
+                                  _openTaskDialog(existingTask: task),
                             ),
                           );
                         }).toList(),
@@ -671,7 +896,8 @@ class _HoverableTaskCardState extends State<_HoverableTaskCard> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final isLate = widget.task.dueDate != null && widget.task.dueDate!.isBefore(now);
+    final isLate =
+        widget.task.dueDate != null && widget.task.dueDate!.isBefore(now);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
@@ -686,15 +912,15 @@ class _HoverableTaskCardState extends State<_HoverableTaskCard> {
             color: widget.task.completed
                 ? Colors.green.shade50
                 : isLate
-                    ? Colors.red.shade50
-                    : (_hovering ? Colors.grey.shade200 : Colors.grey.shade100),
+                ? Colors.red.shade50
+                : (_hovering ? Colors.grey.shade200 : Colors.grey.shade100),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: widget.task.completed
                   ? Colors.green.shade300
                   : isLate
-                      ? Colors.red.shade300
-                      : Colors.grey.shade300,
+                  ? Colors.red.shade300
+                  : Colors.grey.shade300,
             ),
           ),
           child: ListTile(
@@ -731,7 +957,9 @@ class _HoverableTaskCardState extends State<_HoverableTaskCard> {
                       style: TextStyle(
                         fontSize: 12,
                         color: isLate ? Colors.red : Colors.grey,
-                        fontWeight: isLate ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isLate
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
                   ),
