@@ -88,6 +88,8 @@ class _ProfileTabState extends State<ProfileTab> {
     final prefs = await SharedPreferences.getInstance();
     final completedTasksRaw = prefs.getStringList('completedTasks') ?? [];
     setState(() {
+      // completedTasksRaw is maintained with newest-first by your completion handler,
+      // so preserve that order here (newest at index 0).
       completedTasks = completedTasksRaw
           .map((e) => jsonDecode(e) as Map<String, dynamic>)
           .toList();
@@ -249,6 +251,7 @@ class _ProfileTabState extends State<ProfileTab> {
       backgroundColor: const Color(0xFFF7F3EF),
       appBar: AppBar(
         backgroundColor: Colors.brown.shade800,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           'Profile',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -369,7 +372,8 @@ class _ProfileTabState extends State<ProfileTab> {
                       ),
                     )
                   else
-                    for (final task in completedTasks.reversed.take(5))
+                    // show newest completed tasks first (completedTasks is maintained newest-first)
+                    for (final task in completedTasks.take(5))
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
@@ -407,7 +411,7 @@ class _ProfileTabState extends State<ProfileTab> {
                               alignment: Alignment.centerRight,
                               child: Text(
                                 task['completedAt'] != null
-                                    ? DateFormat('MM/dd/yyyy HH:mm').format(
+                                    ? DateFormat('MMM d h:mm a').format(
                                         DateTime.parse(task['completedAt']),
                                       )
                                     : '',
