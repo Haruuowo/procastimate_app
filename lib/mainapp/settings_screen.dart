@@ -26,29 +26,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
           decoration: const InputDecoration(hintText: 'Enter your email'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () async {
               final email = emailController.text.trim();
-              if (email.isEmpty || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email address')));
+              if (email.isEmpty ||
+                  !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Enter a valid email address')),
+                );
                 return;
               }
               Navigator.of(ctx).pop();
 
               // Guard: ensure Firebase was initialized
               if (Firebase.apps.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Firebase not initialized')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Firebase not initialized')),
+                );
                 return;
               }
 
               final messenger = ScaffoldMessenger.of(context);
-              messenger.showSnackBar(const SnackBar(content: Text('Sending reset email...')));
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Sending reset email...')),
+              );
               try {
-                await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-                messenger.showSnackBar(const SnackBar(content: Text('Password reset email sent')));
+                await FirebaseAuth.instance.sendPasswordResetEmail(
+                  email: email,
+                );
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Password reset email sent')),
+                );
               } on FirebaseAuthException catch (e) {
-                messenger.showSnackBar(SnackBar(content: Text('Error: ${e.message ?? e.code}')));
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Error: ${e.message ?? e.code}')),
+                );
               } catch (e) {
                 messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
               }
@@ -63,20 +79,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _signOut() async {
     // Guard: ensure Firebase was initialized
     if (Firebase.apps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Firebase not initialized')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Firebase not initialized')));
       return;
     }
 
     try {
       await FirebaseAuth.instance.signOut();
-      try { await AuthService.instance.signOut(); } catch (_) {}
+      try {
+        await AuthService.instance.signOut();
+      } catch (_) {}
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const HomeScreen()), (route) => false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Signed out')));
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign out failed: ${e.message ?? e.code}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sign out failed: ${e.message ?? e.code}')),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign out failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sign out failed: $e')));
     }
   }
 
@@ -104,7 +133,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (v) {
               setState(() => _darkMode = v);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Dark mode placeholder: ${v ? 'on' : 'off'}')),
+                SnackBar(
+                  content: Text('Dark mode placeholder: ${v ? 'on' : 'off'}'),
+                ),
               );
             },
           ),
@@ -114,9 +145,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black87),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black87,
+                ),
                 onPressed: _signOut,
-                child: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+                child: const Text(
+                  'Sign Out',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
           ),

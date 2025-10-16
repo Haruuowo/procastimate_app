@@ -27,6 +27,10 @@ class _ScoreScreenState extends State<ScoreScreen> {
   String? _photoUrl;
   bool _loadingUser = true;
 
+  // streak count (display only)
+  int _streakCount = 0;
+  bool _streakActive = false;
+
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
 
   @override
@@ -65,7 +69,6 @@ class _ScoreScreenState extends State<ScoreScreen> {
     final prefs = await SharedPreferences.getInstance();
     final savedScore = prefs.getInt('score') ?? 0;
 
-    // Keep cumulative score (do not reset at 100)
     if (mounted) {
       setState(() {
         score = savedScore;
@@ -73,8 +76,15 @@ class _ScoreScreenState extends State<ScoreScreen> {
     }
   }
 
+  // small helper: show at most N characters in UI but keep full text in data
+  String _displayTitle(String title) {
+    const int maxChars = 12;
+    if (title.length <= maxChars) return title;
+    return title.substring(0, maxChars) + '…';
+  }
+
   // Listen to Firestore user document so ScoreScreen updates in real-time
-  // when other parts of the app (MainScreen / RewardShop) update the score.
+  // Also update completedTasks instantly when Firestore changes.
   void _subscribeScoreUpdates() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -88,31 +98,89 @@ class _ScoreScreenState extends State<ScoreScreen> {
             if (!mounted) return;
             final data = snap.data();
             if (data == null) return;
-            final dynamic remote = data['score'];
-            if (remote == null) return;
 
-            final int remoteScore;
-            if (remote is int) {
-              remoteScore = remote;
-            } else if (remote is double) {
-              remoteScore = remote.toInt();
-            } else if (remote is String) {
-              remoteScore = int.tryParse(remote) ?? score;
-            } else {
-              remoteScore = score;
+            // score update
+            final dynamic remote = data['score'];
+            if (remote != null) {
+              final int remoteScore;
+              if (remote is int) {
+                remoteScore = remote;
+              } else if (remote is double) {
+                remoteScore = remote.toInt();
+              } else if (remote is String) {
+                remoteScore = int.tryParse(remote) ?? score;
+              } else {
+                remoteScore = score;
+              }
+
+              if (remoteScore != score) {
+                setState(() {
+                  score = remoteScore;
+                });
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setInt('score', remoteScore);
+              }
             }
 
-            if (remoteScore != score) {
-              setState(() {
-                score = remoteScore;
-              });
-              // keep local prefs in sync
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setInt('score', remoteScore);
+            // streak update (same snapshot)
+            final dynamic remoteStreak = data['streakCount'];
+            if (remoteStreak != null) {
+              int remoteCount = 0;
+              if (remoteStreak is int) {
+                remoteCount = remoteStreak;
+              } else if (remoteStreak is double) {
+                remoteCount = remoteStreak.toInt();
+              } else if (remoteStreak is String) {
+                remoteCount = int.tryParse(remoteStreak) ?? 0;
+              }
+              if (mounted && remoteCount != _streakCount) {
+                setState(() {
+                  _streakCount = remoteCount;
+                  _streakActive = _streakCount > 0;
+                });
+              }
+            }
+
+            // completedTasks update: if firestore has completedTasks, use it and persist to prefs
+            final dynamic remoteCompleted = data['completedTasks'];
+            if (remoteCompleted != null && remoteCompleted is List) {
+              try {
+                // normalize list -> List<Map<String,dynamic>>
+                final List<Map<String, dynamic>> list = remoteCompleted.map((
+                  e,
+                ) {
+                  if (e is Map) return Map<String, dynamic>.from(e);
+                  return <String, dynamic>{};
+                }).toList();
+
+                // sort newest first by completedAt if field exists
+                list.sort((a, b) {
+                  final da =
+                      DateTime.tryParse(a['completedAt'] ?? '') ??
+                      DateTime.fromMillisecondsSinceEpoch(0);
+                  final db =
+                      DateTime.tryParse(b['completedAt'] ?? '') ??
+                      DateTime.fromMillisecondsSinceEpoch(0);
+                  return db.compareTo(da);
+                });
+
+                // persist local prefs so other screens have same order
+                final prefs = await SharedPreferences.getInstance();
+                final encoded = list.map((e) => jsonEncode(e)).toList();
+                await prefs.setStringList('completedTasks', encoded);
+
+                if (mounted) {
+                  setState(() {
+                    completedTasks = list;
+                  });
+                }
+              } catch (e) {
+                // ignore parse errors
+              }
             }
           },
           onError: (e) {
-            // ignore errors - Firestore listener may throw on permission issues etc.
+            // ignore errors
           },
         );
   }
@@ -120,11 +188,31 @@ class _ScoreScreenState extends State<ScoreScreen> {
   Future<void> _loadCompletedTasks() async {
     final prefs = await SharedPreferences.getInstance();
     final completedTasksRaw = prefs.getStringList('completedTasks') ?? [];
-    setState(() {
-      completedTasks = completedTasksRaw
-          .map((e) => jsonDecode(e) as Map<String, dynamic>)
-          .toList();
+
+    // parse and show most-recently completed task at top
+    final list = completedTasksRaw.map((e) {
+      try {
+        return jsonDecode(e) as Map<String, dynamic>;
+      } catch (_) {
+        return <String, dynamic>{};
+      }
+    }).toList();
+
+    list.sort((a, b) {
+      final da =
+          DateTime.tryParse(a['completedAt'] ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final db =
+          DateTime.tryParse(b['completedAt'] ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return db.compareTo(da);
     });
+
+    if (mounted) {
+      setState(() {
+        completedTasks = list;
+      });
+    }
   }
 
   void _onItemTapped(int i) {
@@ -140,74 +228,118 @@ class _ScoreScreenState extends State<ScoreScreen> {
     }
   }
 
+  Widget _buildAvatarWithStreak() {
+    const double avatarRadius = 18.0;
+    final double avatarDiameter = avatarRadius * 2;
+    final streakAsset = _streakActive
+        ? 'assets/Streaks_On.png'
+        : 'assets/Streaks_Off.png';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () async {
+            await Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProfileTab()));
+            _loadUserData();
+          },
+          borderRadius: BorderRadius.circular(50),
+          child: CircleAvatar(
+            radius: avatarRadius,
+            backgroundColor: Colors.white24,
+            backgroundImage: _photoUrl != null
+                ? NetworkImage(_photoUrl!)
+                : null,
+            child: _photoUrl == null
+                ? const Icon(Icons.person, color: Colors.white)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: avatarDiameter,
+          height: avatarDiameter,
+          child: ClipOval(
+            child: Image.asset(
+              streakAsset,
+              width: avatarDiameter,
+              height: avatarDiameter,
+              fit: BoxFit.cover,
+              errorBuilder: (ctx, err, stack) {
+                return Container(
+                  width: avatarDiameter,
+                  height: avatarDiameter,
+                  color: Colors.white24,
+                  child: const Icon(
+                    Icons.local_fire_department,
+                    color: Colors.orange,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$_streakCount',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // fill ratio between 0 and 1 based on the current score (keeps cumulative score)
-    final double fillRatio = ((score % 100) / 100).clamp(
-      0.0,
-      1.0,
-    ); // safe clamp
+    final double fillRatio = ((score % 100) / 100).clamp(0.0, 1.0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3EF),
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 TOP APP BAR
+            // 🔹 TOP APP BAR (matched to main_screen style)
             Container(
               width: double.infinity,
               height: 72,
               color: Colors.brown.shade800,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  InkWell(
-                    onTap: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ProfileTab()),
-                      );
-                      _loadUserData();
-                    },
-                    borderRadius: BorderRadius.circular(50),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: Colors.white24,
-                      backgroundImage: _photoUrl != null
-                          ? NetworkImage(_photoUrl!)
-                          : null,
-                      child: _photoUrl == null
-                          ? const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 26,
-                            )
-                          : null,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildAvatarWithStreak(),
+                  ),
+                  const Center(
+                    child: Text(
+                      "ProcrastiMate",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                  const Text(
-                    "ProcrastiMate",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 20,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.settings,
-                      color: Colors.white,
-                      size: 26,
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).push(
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.settings,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                      onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const SettingsScreen(),
                         ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -303,14 +435,18 @@ class _ScoreScreenState extends State<ScoreScreen> {
                             DataColumn(label: Text('Completed At')),
                           ],
                           rows: completedTasks
+                              .take(20)
                               .map(
                                 (task) => DataRow(
                                   cells: [
                                     DataCell(
-                                      SizedBox(
-                                        width: 120,
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 220,
+                                        ),
                                         child: Text(
-                                          task['title'] ?? '',
+                                          _displayTitle(task['title'] ?? ''),
+                                          softWrap: false,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(fontSize: 14),
@@ -319,20 +455,21 @@ class _ScoreScreenState extends State<ScoreScreen> {
                                     ),
                                     DataCell(Text(task['points'].toString())),
                                     DataCell(
-                                      SizedBox(
-                                        width: 120,
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 160,
+                                        ),
                                         child: Text(
                                           task['completedAt'] != null
                                               ? DateFormat(
-                                                  'MM/dd/yyyy HH:mm',
+                                                  'MMM d h:mm a',
                                                 ).format(
                                                   DateTime.parse(
                                                     task['completedAt'],
                                                   ),
                                                 )
                                               : '',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                          softWrap: true,
                                           style: const TextStyle(fontSize: 13),
                                         ),
                                       ),
@@ -425,7 +562,6 @@ class WavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Gradient fill (blue → teal)
     final gradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -450,10 +586,8 @@ class WavePainter extends CustomPainter {
     final clipPath = Path()..addOval(rect);
     canvas.clipPath(clipPath);
 
-    // Base water level
     final baseHeight = size.height * (1 - progress);
 
-    // Create a smooth wave path
     final path = Path();
     const waveAmplitude = 6.0;
     const waveFrequency = 2.0;
@@ -471,9 +605,7 @@ class WavePainter extends CustomPainter {
     path.lineTo(0, size.height);
     path.close();
 
-    // Fill with gradient
     canvas.drawPath(path, paint);
-    // Draw outer circle border
     canvas.drawOval(rect, borderPaint);
   }
 
