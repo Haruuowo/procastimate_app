@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:procastimate_app/mainapp/score_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RewardShopScreen extends StatefulWidget {
   const RewardShopScreen({super.key});
@@ -33,15 +35,33 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
 
   Future<void> _saveRewards() async {
     final prefs = await SharedPreferences.getInstance();
-    prefs.setString('rewards', jsonEncode(rewards));
+    await prefs.setString('rewards', jsonEncode(rewards));
   }
 
+  // Update both SharedPreferences and Firestore so changes persist and other screens
+  // (ScoreScreen) won't overwrite them from Firestore state.
   Future<void> _updatePoints(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    prefs.setInt('score', value);
-    setState(() {
-      currentPoints = value;
-    });
+    await prefs.setInt('score', value);
+
+    // Try to update Firestore as well so remote source of truth matches local.
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'score': value,
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      // ignore firestore errors but keep local prefs updated
+      debugPrint('Failed to update Firestore score: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        currentPoints = value;
+      });
+    }
   }
 
   void _showCustomizeDialog() {
@@ -55,10 +75,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Add Reward',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: Colors.brown,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.brown),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -101,7 +118,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               final rewardName = rewardController.text.trim();
               final cost = int.tryParse(pointsController.text.trim()) ?? 0;
               if (rewardName.isNotEmpty && cost > 0) {
@@ -112,13 +129,16 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
                     'claimed': false,
                   });
                 });
-                _saveRewards();
+                await _saveRewards();
               }
               Navigator.pop(context);
             },
             child: const Text(
               'Save',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -134,13 +154,15 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
   }
 
   void _claimReward(int index) async {
-    final cost = rewards[index]['points'];
+    final cost = rewards[index]['points'] as int;
     if (currentPoints >= cost) {
-      await _updatePoints((currentPoints - cost).toInt());
+      final newPoints = currentPoints - cost;
+      await _updatePoints(newPoints); // updates prefs and Firestore
+
       setState(() {
         rewards[index]['claimed'] = true;
       });
-      _saveRewards();
+      await _saveRewards();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -175,10 +197,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
         elevation: 0,
         title: const Text(
           'Reward Shop',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -196,10 +215,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
           'Add Reward',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
       body: Padding(
@@ -246,10 +262,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
                       child: Text(
                         'No rewards yet.\nTap "Add Reward" to create one.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.black54,
-                          fontSize: 16,
-                        ),
+                        style: TextStyle(color: Colors.black54, fontSize: 16),
                       ),
                     )
                   : ListView.builder(
@@ -301,7 +314,9 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
                                       backgroundColor: Colors.green.shade400,
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 14, vertical: 8),
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -309,11 +324,15 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
                                     child: const Text('Claim'),
                                   )
                                 else
-                                  const Icon(Icons.check_circle,
-                                      color: Colors.green),
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                  ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline,
-                                      color: Colors.brown),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.brown,
+                                  ),
                                   onPressed: () => _deleteReward(index),
                                 ),
                               ],

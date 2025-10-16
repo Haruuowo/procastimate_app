@@ -72,6 +72,9 @@ flutter:
   assets:
     - assets/logo.png
     - assets/profile_placeholder.png
+    - assets/streaks_on.png
+    - assets/streaks_off.png
+
 
   # Example:
   # assets:
