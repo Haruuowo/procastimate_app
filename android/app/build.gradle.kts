@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.example.procastimate_app"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.0.12077973" // 🔥 Force the correct NDK version
 
     compileOptions {
