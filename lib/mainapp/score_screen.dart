@@ -27,7 +27,6 @@ class _ScoreScreenState extends State<ScoreScreen> {
   String? _photoUrl;
   bool _loadingUser = true;
 
-  // streak count (display only)
   int _streakCount = 0;
   bool _streakActive = false;
 
@@ -83,8 +82,6 @@ class _ScoreScreenState extends State<ScoreScreen> {
     return '${title.substring(0, maxChars)}…';
   }
 
-  // Listen to Firestore user document so ScoreScreen updates in real-time
-  // Also update completedTasks instantly when Firestore changes.
   void _subscribeScoreUpdates() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -122,7 +119,6 @@ class _ScoreScreenState extends State<ScoreScreen> {
               }
             }
 
-            // streak update (same snapshot)
             final dynamic remoteStreak = data['streakCount'];
             if (remoteStreak != null) {
               int remoteCount = 0;
@@ -303,7 +299,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 TOP APP BAR (matched to main_screen style)
+            // TOP APP BAR 
             Container(
               width: double.infinity,
               height: 72,
@@ -345,7 +341,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
               ),
             ),
 
-            // 🎁 Reward Shop button
+            // Reward Shop button
             Padding(
               padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
               child: Row(
@@ -416,7 +412,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
               ),
             ),
 
-            // 📋 Completed Tasks Table
+            // Completed Tasks Table
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -489,7 +485,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
         ),
       ),
 
-      // 🔹 Bottom Navigation Bar
+      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -512,7 +508,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
   }
 }
 
-// 🌊 Animated Water Fill Widget
+// Animated Water Fill Widget
 class AnimatedWaterFill extends StatefulWidget {
   final double progress; // 0–1
   const AnimatedWaterFill({super.key, required this.progress});
@@ -556,7 +552,7 @@ class _AnimatedWaterFillState extends State<AnimatedWaterFill>
   }
 }
 
-// 🎨 Gradient + Animated Wave Painter
+// Gradient + Animated Wave Painter
 class WavePainter extends CustomPainter {
   final double progress;
   final double wavePhase;

@@ -1,4 +1,3 @@
-// services/auth_service.dart
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,7 +14,7 @@ class AuthService {
   User? get currentUser => _auth.currentUser;
   Stream<User?> get userChanges => _auth.authStateChanges();
 
-  /// 🔹 Sign in with email + password
+  /// Sign in with email + password
   Future<User?> signIn(String email, String password) async {
     final result = await _auth.signInWithEmailAndPassword(
       email: email,
@@ -24,7 +23,7 @@ class AuthService {
     return result.user;
   }
 
-  /// 🔹 Sign up and create Firestore user profile
+  /// Sign up and create Firestore user profile
   Future<User?> signUp(String email, String password,
       {String? username, File? profileImage}) async {
     final result = await _auth.createUserWithEmailAndPassword(
@@ -60,7 +59,7 @@ class AuthService {
     return user;
   }
 
-  /// 🔹 Update user profile later
+  /// Update user profile later
   Future<void> updateProfile({String? username, File? profileImage}) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -84,6 +83,6 @@ class AuthService {
     });
   }
 
-  /// 🔹 Sign out
+  // Sign out
   Future<void> signOut() async => await _auth.signOut();
 }

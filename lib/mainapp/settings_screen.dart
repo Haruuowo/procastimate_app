@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:procastimate_app/services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:procastimate_app/screens/home_screen.dart'; // added import
+import 'package:procastimate_app/screens/home_screen.dart'; 
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -12,7 +12,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _darkMode = false; // local placeholder
+  bool _darkMode = false; // placeholder
 
   void _showResetPasswordDialog() {
     final TextEditingController emailController = TextEditingController();
@@ -125,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const Divider(),
-          // Local placeholder switch (does not change app theme yet)
+          // Local placeholder switch
           SwitchListTile(
             title: const Text('Dark mode (placeholder)'),
             subtitle: const Text('Local toggle only — not persisted'),

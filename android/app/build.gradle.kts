@@ -11,7 +11,7 @@ plugins {
 android {
     namespace = "com.example.procastimate_app"
     compileSdk = 36
-    ndkVersion = "27.0.12077973" // 🔥 Force the correct NDK version
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.procastimate_app"
-        minSdk = flutter.minSdkVersion              // 🔥 Firebase requires at least 23
+        minSdk = flutter.minSdkVersion              
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"

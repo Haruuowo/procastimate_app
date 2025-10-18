@@ -1,4 +1,3 @@
-// task_data.dart
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,7 +6,7 @@ import 'task.dart';
 /// In-memory map of tasks grouped by date (yyyy-MM-dd)
 final Map<String, List<Task>> tasksByDate = {};
 
-/// Add a new task and persist locally
+/// Add new task, persists locally
 void addTask(Task task) {
   final key = DateFormat('yyyy-MM-dd').format(task.dueDate ?? DateTime.now());
   if (!tasksByDate.containsKey(key)) {
@@ -30,7 +29,6 @@ Future<void> saveTasksToPrefs() async {
   }
 }
 
-/// Load all tasks from SharedPreferences into memory
 Future<void> loadTasksFromPrefs() async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -51,7 +49,6 @@ Future<void> loadTasksFromPrefs() async {
   }
 }
 
-/// Update a specific task’s completion state and save
 void updateTaskCompletion(String taskId, bool completed) {
   for (final entry in tasksByDate.entries) {
     final updatedList = entry.value.map((task) {

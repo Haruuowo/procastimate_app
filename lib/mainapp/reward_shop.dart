@@ -38,13 +38,10 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
     await prefs.setString('rewards', jsonEncode(rewards));
   }
 
-  // Update both SharedPreferences and Firestore so changes persist and other screens
-  // (ScoreScreen) won't overwrite them from Firestore state.
   Future<void> _updatePoints(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('score', value);
 
-    // Try to update Firestore as well so remote source of truth matches local.
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
@@ -53,7 +50,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
         }, SetOptions(merge: true));
       }
     } catch (e) {
-      // ignore firestore errors but keep local prefs updated
+      // ignore firestore errors, keep local prefs updated
       debugPrint('Failed to update Firestore score: $e');
     }
 
@@ -157,7 +154,7 @@ class _RewardShopScreenState extends State<RewardShopScreen> {
     final cost = rewards[index]['points'] as int;
     if (currentPoints >= cost) {
       final newPoints = currentPoints - cost;
-      await _updatePoints(newPoints); // updates prefs and Firestore
+      await _updatePoints(newPoints); 
 
       setState(() {
         rewards[index]['claimed'] = true;

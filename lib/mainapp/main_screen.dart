@@ -8,7 +8,7 @@ import 'package:procastimate_app/mainapp/calendar_screen.dart';
 import 'package:procastimate_app/mainapp/score_screen.dart';
 import 'package:procastimate_app/mainapp/profile_screen.dart';
 import 'package:procastimate_app/models/task.dart';
-import 'package:procastimate_app/models/task_data.dart'; // Assumed dependency
+import 'package:procastimate_app/models/task_data.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -27,9 +27,9 @@ class _MainScreenState extends State<MainScreen> {
   bool _loading = true;
   int _score = 0;
 
-  // Streak state
+
   int _streakCount = 0;
-  String? _lastStreakDate; // stored as 'yyyy-MM-dd'
+  String? _lastStreakDate; 
   bool _streakActive = false;
 
   @override
@@ -42,7 +42,7 @@ class _MainScreenState extends State<MainScreen> {
     await _loadUserName();
     await loadTasks();
     await _loadScore();
-    await _loadStreak(); // load streak state
+    await _loadStreak(); 
     setState(() => _loading = false);
   }
 
@@ -185,7 +185,6 @@ class _MainScreenState extends State<MainScreen> {
         ]),
       });
 
-      // Save locally — insert at 0 so most recent is on top
       final prefs = await SharedPreferences.getInstance();
       final completedTasksRaw = prefs.getStringList('completedTasks') ?? [];
       completedTasksRaw.insert(
@@ -206,11 +205,7 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // --- STREAK LOGIC ---
-  // Streak rules:
-  // - stored lastStreakDate as 'yyyy-MM-dd' local date
-  // - if user completes >=1 task in a 24h window (ends at midnight local), streak continues
-  // - if no completion within 24 hours (i.e. lastStreakDate older than yesterday), streak resets
+ 
   Future<void> _loadStreak() async {
     final prefs = await SharedPreferences.getInstance();
     final savedCount = prefs.getInt('streakCount');
@@ -327,7 +322,7 @@ class _MainScreenState extends State<MainScreen> {
 
     // persist
     await _saveStreakToPrefsAndFirestore(_streakCount, _lastStreakDate);
-    setState(() {}); // refresh UI
+    setState(() {}); 
   }
 
   // --- END STREAK LOGIC ---
@@ -562,7 +557,6 @@ class _MainScreenState extends State<MainScreen> {
     final task = tasks[index];
     final updated = task.copyWith(completed: true, completedAt: DateTime.now());
 
-    // Update local state immediately so card vanishes.
     setState(() {
       _score += 5;
       tasks.removeAt(index);
@@ -591,13 +585,10 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildAvatarWithStreak() {
-    // choose asset according to streak state
     final streakAsset = _streakActive
         ? 'assets/Streaks_On.png'
         : 'assets/Streaks_Off.png';
 
-    // Use same visual size as profile avatar but avoid expanding the app bar.
-    // Keep avatar radius matching other places (18 used elsewhere).
     const double avatarRadius = 18.0;
     final double avatarDiameter = avatarRadius * 2;
 
@@ -623,7 +614,6 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        // streak badge (same size as avatar) - fixed box so it won't expand the app bar
         SizedBox(
           width: avatarDiameter,
           height: avatarDiameter,
@@ -648,7 +638,6 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        // only show the streak count (no label)
         Text(
           '$_streakCount',
           style: const TextStyle(
@@ -679,7 +668,7 @@ class _MainScreenState extends State<MainScreen> {
               color: Colors.brown.shade800,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                // use Stack so title stays perfectly centered visually
+
                 child: Stack(
                   alignment: Alignment.center,
                   children: [

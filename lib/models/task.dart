@@ -13,7 +13,7 @@ class Task {
     required this.id,
     required this.title,
     this.description,
-    this.subject, // ✅ Added to constructor
+    this.subject, 
     DateTime? createdAt,
     this.dueDate,
     this.completedAt,
@@ -21,12 +21,12 @@ class Task {
     this.completed = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  //
+
   Task copyWith({
     String? id,
     String? title,
     String? description,
-    String? subject, // ✅ Added to copyWith
+    String? subject, 
     DateTime? createdAt,
     DateTime? dueDate,
     DateTime? completedAt,
@@ -37,7 +37,7 @@ class Task {
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
-      subject: subject ?? this.subject, // ✅ Added
+      subject: subject ?? this.subject, 
       createdAt: createdAt ?? this.createdAt,
       dueDate: dueDate ?? this.dueDate,
       completedAt: completedAt ?? this.completedAt,

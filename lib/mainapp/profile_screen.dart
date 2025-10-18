@@ -88,8 +88,6 @@ class _ProfileTabState extends State<ProfileTab> {
     final prefs = await SharedPreferences.getInstance();
     final completedTasksRaw = prefs.getStringList('completedTasks') ?? [];
     setState(() {
-      // completedTasksRaw is maintained with newest-first by your completion handler,
-      // so preserve that order here (newest at index 0).
       completedTasks = completedTasksRaw
           .map((e) => jsonDecode(e) as Map<String, dynamic>)
           .toList();
@@ -375,7 +373,6 @@ class _ProfileTabState extends State<ProfileTab> {
                       ),
                     )
                   else
-                    // show newest completed tasks first (completedTasks is maintained newest-first)
                     for (final task in completedTasks.take(5))
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),

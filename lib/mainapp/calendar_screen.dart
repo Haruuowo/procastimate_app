@@ -26,7 +26,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   String? _photoUrl;
   bool _loadingUser = true;
 
-  // streak count (display only)
   int _streakCount = 0;
   bool _streakActive = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _streakSub;
@@ -90,7 +89,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
             }
           },
           onError: (_) {
-            // ignore
           },
         );
   }
@@ -189,7 +187,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 🔹 TOP APP BAR (matched to main_screen style)
             Container(
               width: double.infinity,
               height: 72,
@@ -231,7 +228,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
 
-            // 🔹 CALENDAR BODY
             Expanded(
               child: Column(
                 children: [
@@ -345,7 +341,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
       ),
 
-      // 🔹 BOTTOM NAVIGATION BAR
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
